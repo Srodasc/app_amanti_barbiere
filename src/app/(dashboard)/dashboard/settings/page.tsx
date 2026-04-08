@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks';
 import { Button, Input, Modal, Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { Service } from '@/types';
-import { cn, getErrorMessage } from '@/lib/utils';
+import { cn, getErrorMessage, getCurrentAdmin } from '@/lib/utils';
 
 const defaultService = {
   name: '',
@@ -81,20 +81,25 @@ export default function SettingsPage() {
 
     setIsSubmitting(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const adminId = await getCurrentAdmin();
+    
+    const formData = {
+      ...form,
+      admin_id: adminId,
+    };
 
     let result;
     if (editingService) {
       result = await supabase
         .from('services')
-        .update(form)
+        .update(formData)
         .eq('id', editingService.id)
         .select()
         .single();
     } else {
       result = await supabase
         .from('services')
-        .insert({ ...form, user_id: user?.id })
+        .insert(formData)
         .select()
         .single();
     }
