@@ -1,0 +1,377 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Serif:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+  
+  body {
+    background-color: #fcf9f8;
+    color: #313030;
+  }
+}
+
+@layer components {
+  /* Primary Button - Gold Gradient */
+  .btn-primary {
+    background: linear-gradient(135deg, #775a19 0%, #c5a059 100%);
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(119, 90, 25, 0.2);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 6px 20px rgba(119, 90, 25, 0.3);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(119, 90, 25, 0.2);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Secondary Button */
+  .btn-secondary {
+    background-color: #313030;
+    color: #fcf9f8;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+  }
+  .btn-secondary:hover {
+    background-color: #3c3c3c;
+  }
+  .btn-secondary:active {
+    transform: scale(0.98);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Ghost Button */
+  .btn-ghost {
+    background-color: transparent;
+    color: #313030;
+    padding: 0.625rem 1rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+  }
+  .btn-ghost:hover {
+    background-color: rgba(49, 48, 48, 0.08);
+  }
+  
+  /* Danger Button */
+  .btn-danger {
+    background-color: #ba1a1a;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+  }
+  .btn-danger:hover {
+    background-color: #9a1a1a;
+  }
+  .btn-danger:active {
+    transform: scale(0.98);
+  }
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  /* Input Field - No box, bottom border only on focus */
+  .input-field {
+    width: 100%;
+    background-color: #f5f0ed;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0.25rem 0.25rem 0 0;
+    padding: 0.75rem 1rem;
+    color: #313030;
+    transition: all 0.2s ease;
+  }
+  .input-field::placeholder {
+    color: rgba(49, 48, 48, 0.5);
+  }
+  .input-field:focus {
+    outline: none;
+    border-bottom-color: #775a19;
+    background-color: #ebe4df;
+  }
+  
+  .input-error {
+    border-bottom-color: #ba1a1a;
+  }
+  .input-error:focus {
+    border-bottom-color: #ba1a1a;
+  }
+  
+  /* Card - Lifted paper effect */
+  .card {
+    background-color: #ffffff;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(49, 48, 48, 0.04);
+    transition: all 0.2s ease;
+  }
+  .card:hover {
+    box-shadow: 0 8px 24px rgba(49, 48, 48, 0.06);
+  }
+  
+  /* Surface Container for sections */
+  .surface-container {
+    background-color: #f5f0ed;
+  }
+  
+  .surface-container-low {
+    background-color: #ebe4df;
+  }
+  
+  /* Glass effect for modals */
+  .glass {
+    background-color: rgba(252, 249, 248, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  
+  /* Skeleton */
+  .skeleton {
+    background-color: #ebe4df;
+    border-radius: 0.25rem;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  /* Chips */
+  .chip {
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.125rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+  }
+  .chip-secondary {
+    background-color: #e0d5cf;
+    color: #313030;
+  }
+  .chip-primary {
+    background-color: rgba(119, 90, 25, 0.15);
+    color: #775a19;
+  }
+}
+
+@layer utilities {
+  /* Text colors */
+  .text-gradient {
+    background: linear-gradient(135deg, #775a19 0%, #c5a059 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Text colors */
+  .text-primary { color: #775a19; }
+  .text-gold-light { color: #c5a059; }
+  .text-surface { color: #fcf9f8; }
+  .text-inverse { color: #313030; }
+  .text-muted { color: rgba(49, 48, 48, 0.6); }
+  
+  /* Background colors */
+  .bg-primary { background-color: #775a19; }
+  .bg-gold-light { background-color: #c5a059; }
+  .bg-surface { background-color: #fcf9f8; }
+  .bg-inverse { background-color: #313030; }
+  .bg-surface-container { background-color: #f5f0ed; }
+  .bg-surface-low { background-color: #ebe4df; }
+  
+  /* Border colors with opacity */
+  .border-gold { border-color: rgba(119, 90, 25, 0.15); }
+
+  /* ========== MOBILE RESPONSIVE UTILITIES ========== */
+  
+  /* Safe area padding for notched phones (iPhone X+) */
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-left { padding-left: env(safe-area-inset-left); }
+  .safe-right { padding-right: env(safe-area-inset-right); }
+  
+  /* Safe area for notched phones - compatible */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+  .pt-safe { padding-top: env(safe-area-inset-top, 20px); }
+  
+  /* Minimum touch target size (44px - Apple HIG) */
+  .touch-target { min-height: 44px; min-width: 44px; }
+  
+  /* Responsive text sizes */
+  .text-xs-mobile { font-size: 0.75rem; }
+  .text-sm-mobile { font-size: 0.875rem; }
+  .text-base-mobile { font-size: 1rem; }
+  .text-lg-mobile { font-size: 1.125rem; }
+  .text-xl-mobile { font-size: 1.25rem; }
+  .text-2xl-mobile { font-size: 1.5rem; }
+  
+  /* Responsive spacing */
+  .p-mobile { padding: 1rem; }
+  .px-mobile { padding-left: 1rem; padding-right: 1rem; }
+  .py-mobile { padding-top: 1rem; padding-bottom: 1rem; }
+  .gap-mobile { gap: 1rem; }
+  
+  /* Mobile-first full width */
+  .w-full-mobile { width: 100%; }
+  .max-w-full-mobile { max-width: 100%; }
+  
+  /* Mobile-friendly inputs */
+  .input-mobile {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    padding: 0.875rem 1rem;
+  }
+  
+  /* Touch-friendly buttons */
+  .btn-mobile {
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+  }
+  
+  /* Swipeable container */
+  .swipe-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .swipe-container::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Responsive container */
+  .container-mobile {
+    width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* iPhone SE / Small phones (< 320px) */
+  @media (max-width: 320px) {
+    .text-xs-xs { font-size: 0.625rem; }
+    .text-sm-xs { font-size: 0.75rem; }
+    .p-xs { padding: 0.5rem; }
+    .gap-xs { gap: 0.5rem; }
+  }
+
+  /* Common phones (320px - 400px) */
+  @media (min-width: 320px) and (max-width: 400px) {
+    .text-sm-base { font-size: 0.8125rem; }
+  }
+
+  /* Large phones / phablets (400px - 500px) */
+  @media (min-width: 400px) {
+    .text-lg-base { font-size: 1rem; }
+  }
+
+  /* iPhone 12/13/14/15 Pro Max, Galaxy S series (430px - 480px) */
+  @media (min-width: 430px) {
+    .text-responsive { font-size: 1.125rem; }
+    .p-responsive { padding: 1.25rem; }
+  }
+
+  /* Tablet detection (768px+) */
+  @media (min-width: 768px) {
+    .hide-mobile { display: block; }
+    .show-mobile { display: none; }
+  }
+
+  @media (max-width: 767px) {
+    .hide-mobile { display: none; }
+    .show-mobile { display: block; }
+  }
+
+  /* Prevent pull-to-refresh on mobile */
+  .no-pull-refresh {
+    overscroll-behavior: contain;
+  }
+
+  /* Responsive grid for mobile */
+  .grid-mobile-1 { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+  .grid-mobile-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  @media (min-width: 640px) {
+    .sm\:grid-mobile-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sm\:grid-mobile-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  /* Sticky bottom bar for mobile */
+  .sticky-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Mobile modal full screen */
+  .modal-mobile {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Bottom sheet style */
+  .bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-radius: 1rem 1rem 0 0;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom, 1rem);
+  }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
