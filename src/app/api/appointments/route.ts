@@ -113,7 +113,13 @@ export async function POST(request: Request) {
       }
 
       if (data && data.id) {
-        return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
       }
     } catch (rpcErr) {
       console.log('RPC exception:', rpcErr);

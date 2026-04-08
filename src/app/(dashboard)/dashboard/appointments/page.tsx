@@ -57,6 +57,9 @@ export default function AppointmentsPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [appointmentToComplete, setAppointmentToComplete] = useState<Appointment | null>(null);
+  const [selectedExtraServices, setSelectedExtraServices] = useState<string[]>([]);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [services, setServices] = useState<Service[]>([]);
@@ -147,25 +150,81 @@ export default function AppointmentsPage() {
   };
 
   const handleStatusChange = async (id: string, status: AppointmentStatus) => {
+    if (status === 'completed') {
+      const appointment = appointments.find(a => a.id === id);
+      if (appointment) {
+        setAppointmentToComplete(appointment);
+        setSelectedExtraServices([]);
+        setIsCompleteModalOpen(true);
+      }
+      return;
+    }
+
     const { error } = await updateStatus(id, status);
     if (error) {
       showToast(getErrorMessage(error), 'error');
     } else {
       showToast(`Estado actualizado a ${APPOINTMENT_STATUSES[status]}`, 'success');
-      
-      if (status === 'completed') {
-        const appointment = appointments.find(a => a.id === id);
-        if (appointment?.service) {
-          await addExpense({
-            concept: `Servicio: ${appointment.service.name}`,
-            amount: appointment.service.price,
-            category: 'other',
-            expense_date: new Date().toISOString().split('T')[0],
-            notes: `Cliente: ${appointment.client?.name}`,
-          });
-        }
+    }
+  };
+
+  const handleCompleteWithExtras = async () => {
+    if (!appointmentToComplete) return;
+
+    setIsSubmitting(true);
+
+    // Primero actualizar el estado a completado
+    const { error: updateError } = await updateStatus(appointmentToComplete.id, 'completed');
+    
+    if (updateError) {
+      showToast(getErrorMessage(updateError), 'error');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Crear gasto del servicio principal
+    if (appointmentToComplete.service) {
+      await addExpense({
+        concept: `Servicio: ${appointmentToComplete.service.name}`,
+        amount: appointmentToComplete.service.price,
+        category: 'other',
+        expense_date: new Date().toISOString().split('T')[0],
+        notes: `Cliente: ${appointmentToComplete.client?.name}`,
+      });
+    }
+
+    // Crear gastos de servicios adicionales
+    for (const extraServiceId of selectedExtraServices) {
+      const extraService = services.find(s => s.id === extraServiceId);
+      if (extraService) {
+        await addExpense({
+          concept: `Extra: ${extraService.name}`,
+          amount: extraService.price,
+          category: 'other',
+          expense_date: new Date().toISOString().split('T')[0],
+          notes: `Cliente: ${appointmentToComplete.client?.name}`,
+        });
       }
     }
+
+    showToast('Cita completada correctamente', 'success');
+    setIsCompleteModalOpen(false);
+    setIsSubmitting(false);
+  };
+
+  const toggleExtraService = (serviceId: string) => {
+    setSelectedExtraServices(prev => 
+      prev.includes(serviceId) 
+        ? prev.filter(id => id !== serviceId)
+        : [...prev, serviceId]
+    );
+  };
+
+  const calculateTotalExtra = () => {
+    return selectedExtraServices.reduce((total, id) => {
+      const service = services.find(s => s.id === id);
+      return total + (service?.price || 0);
+    }, 0);
   };
 
   const handleDelete = async () => {
@@ -478,6 +537,89 @@ export default function AppointmentsPage() {
           >
             Eliminar
           </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isCompleteModalOpen}
+        onClose={() => setIsCompleteModalOpen(false)}
+        title="Completar Cita"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="bg-surface-container-low p-3 rounded-lg">
+            <p className="text-sm text-inverse/60">Servicio principal:</p>
+            <p className="font-semibold text-inverse">
+              {appointmentToComplete?.service?.name} - ${appointmentToComplete?.service?.price}
+            </p>
+          </div>
+
+          {services.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-inverse mb-2">
+                ¿Servicios adicionales? (opcional)
+              </p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {services.map(service => (
+                  <label
+                    key={service.id}
+                    className={cn(
+                      'flex items-center justify-between p-2 rounded cursor-pointer transition-colors',
+                      selectedExtraServices.includes(service.id)
+                        ? 'bg-primary/10 border border-primary'
+                        : 'bg-surface-container-low hover:bg-surface-container-low/80'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedExtraServices.includes(service.id)}
+                        onChange={() => toggleExtraService(service.id)}
+                        className="w-4 h-4 rounded text-primary"
+                      />
+                      <span className="text-sm text-inverse">{service.name}</span>
+                    </div>
+                    <span className="text-sm font-medium text-primary">${service.price}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedExtraServices.length > 0 && (
+            <div className="bg-success/10 p-3 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-inverse">Total extras:</span>
+                <span className="font-bold text-success">${calculateTotalExtra()}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-primary/10 p-3 rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-inverse">Total a cobrar:</span>
+              <span className="text-lg font-bold text-primary">
+                ${(appointmentToComplete?.service?.price || 0) + calculateTotalExtra()}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setIsCompleteModalOpen(false)}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCompleteWithExtras}
+              isLoading={isSubmitting}
+              className="flex-1"
+            >
+              Completar
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

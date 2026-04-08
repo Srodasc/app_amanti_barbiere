@@ -56,7 +56,8 @@ export default function BookingPage() {
   useEffect(() => {
     const loadAppointments = async () => {
       try {
-        const appointmentsRes = await fetch('/api/appointments').then(r => r.json());
+        const cacheBuster = Date.now();
+        const appointmentsRes = await fetch(`/api/appointments?_=${cacheBuster}`).then(r => r.json());
         console.log('Loaded appointments:', appointmentsRes);
         
         if (Array.isArray(appointmentsRes)) {
@@ -87,10 +88,11 @@ export default function BookingPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      const cacheBuster = Date.now();
       const [servicesRes, barbersRes, appointmentsRes] = await Promise.all([
-        fetch('/api/services').then(r => r.json()),
-        fetch('/api/barbers').then(r => r.json()),
-        fetch('/api/appointments').then(r => r.json()),
+        fetch(`/api/services?_=${cacheBuster}`).then(r => r.json()),
+        fetch(`/api/barbers?_=${cacheBuster}`).then(r => r.json()),
+        fetch(`/api/appointments?_=${cacheBuster}`).then(r => r.json()),
       ]);
 
       setServices(Array.isArray(servicesRes) ? servicesRes : []);
@@ -100,9 +102,10 @@ export default function BookingPage() {
         
         // Cargar horarios de cada barbero
         const schedulesMap: Record<string, BarberSchedule[]> = {};
+        const cacheBuster = Date.now();
         for (const barber of barbersRes) {
           try {
-            const schedRes = await fetch(`/api/barbers/${barber.id}/schedules`);
+            const schedRes = await fetch(`/api/barbers/${barber.id}/schedules?_=${cacheBuster}`);
             const schedData = await schedRes.json();
             schedulesMap[barber.id] = Array.isArray(schedData) ? schedData : [];
           } catch (e) {
