@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DATE_RE, UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
+import { noStoreFetch } from '@/lib/supabase/no-store';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false }, global: { fetch: noStoreFetch } }
   );
 
   const { data, error } = await supabase.rpc('get_available_slots', {

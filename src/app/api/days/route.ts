@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
+import { noStoreFetch } from '@/lib/supabase/no-store';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false },
+    auth: { persistSession: false }, global: { fetch: noStoreFetch },
   });
   const { data, error } = await supabase.rpc('get_available_days', { p_service: service, p_barber: barber || null });
   if (error) {
