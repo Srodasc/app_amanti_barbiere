@@ -14,6 +14,7 @@ import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients'
 import { formatCurrency } from '@/lib/utils';
 import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
 import RescheduleModal from '@/components/appointments/RescheduleModal';
+import MyCommissions from '@/components/commissions/MyCommissions';
 import { appointmentErrorMessage, money, PAYMENT_LABELS } from '@/lib/appointments';
 
 type Row = {
@@ -55,6 +56,7 @@ export default function MiDiaPage() {
   const [saleMsg, setSaleMsg] = useState('');
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
   const [toMove, setToMove] = useState<Row | null>(null);
+  const [commKey, setCommKey] = useState(0);
   const [mySchedules, setMySchedules] = useState<{ barber_id: string; day_of_week: number; is_available: boolean }[]>([]);
 
   useEffect(() => {
@@ -164,6 +166,7 @@ export default function MiDiaPage() {
         <p className="text-sm text-inverse/60 mb-4 capitalize">
           {format(new Date(`${date}T00:00:00`), "EEEE d 'de' MMMM", { locale: es })}
         </p>
+        {myBarberId && <MyCommissions barberId={myBarberId} refreshKey={commKey} />}
         {error && <p className="text-error text-sm mb-3">{error}</p>}
         {loading ? (
           <p className="text-inverse/60">Cargando...</p>
@@ -240,6 +243,7 @@ export default function MiDiaPage() {
         onClose={() => setToComplete(null)}
         onDone={() => {
           setToComplete(null);
+          setCommKey((k) => k + 1);
           load();
           loyalty.reload();
         }}

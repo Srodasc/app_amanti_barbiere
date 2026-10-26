@@ -25,6 +25,7 @@ export interface Barber {
   specialty: string | null;
   is_active: boolean;
   created_at: string;
+  commission_pct?: number;
   schedules?: BarberSchedule[];
 }
 
@@ -102,6 +103,7 @@ export interface Expense {
   category: ExpenseCategory;
   expense_date: string;
   receipt_url: string | null;
+  paid_from_cash?: boolean;
   notes: string | null;
   created_at: string;
 }
