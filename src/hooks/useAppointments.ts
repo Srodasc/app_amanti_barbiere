@@ -29,7 +29,8 @@ export function useAppointments() {
         client:clients(*),
         service:services(*)
       `)
-      .eq('admin_id', adminId)
+      // Un solo negocio: todos los administradores ven lo mismo (la RLS ya limita a administradores).
+      // Antes se filtraba por admin_id y un segundo administrador no veía reservas ni gastos ajenos.
       .order('date', { ascending: true })
       .order('start_time', { ascending: true });
 
