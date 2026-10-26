@@ -21,7 +21,8 @@ const FIELDS: { key: string; label: string; placeholder?: string; type?: string;
   { key: 'privacy_policy_date', label: 'Política de datos vigente desde', type: 'date', group: 'negocio' },
   { key: 'max_days_ahead', label: 'Días hacia adelante para reservar', type: 'number', group: 'reserva' },
   { key: 'min_notice_hours', label: 'Horas mínimas de anticipación', type: 'number', group: 'reserva' },
-  { key: 'cancel_before_hours', label: 'Horas antes para cancelar en línea', type: 'number', group: 'reserva' },
+  { key: 'cancel_before_hours', label: 'Horas antes para cancelar o cambiar en línea', type: 'number', group: 'reserva' },
+  { key: 'max_client_reschedules', label: 'Veces que el cliente puede cambiar su cita', type: 'number', group: 'reserva' },
 ];
 
 export default function BusinessSettingsCard() {
@@ -43,7 +44,7 @@ export default function BusinessSettingsCard() {
     setError('');
     const email = values.privacy_email?.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('El correo no es válido.');
-    for (const k of ['max_days_ahead', 'min_notice_hours', 'cancel_before_hours']) {
+    for (const k of ['max_days_ahead', 'min_notice_hours', 'cancel_before_hours', 'max_client_reschedules']) {
       const n = Number(values[k]);
       if (values[k] !== undefined && values[k] !== '' && (!Number.isInteger(n) || n < 0 || n > 365)) {
         return setError('Las reglas de reserva deben ser números enteros entre 0 y 365.');

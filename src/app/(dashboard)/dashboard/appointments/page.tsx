@@ -1,606 +1,394 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { 
-  Plus, 
-  ChevronLeft, 
-  ChevronRight, 
-  Clock, 
-  User, 
-  Scissors,
-  X
-} from 'lucide-react';
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
-  startOfWeek, 
-  endOfWeek, 
-  addDays, 
-  addMonths, 
-  subMonths,
-  isSameMonth,
-  isSameDay,
-  isToday
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, ChevronLeft, ChevronRight, Plus, Scissors } from 'lucide-react';
+import {
+  addDays,
+  addMonths,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isToday,
+  startOfMonth,
+  startOfWeek,
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { useAppointments } from '@/hooks';
-import { isValidMobile } from '@/lib/phone';
-import { useBarbers } from '@/hooks/useBarbers';
-import { Button, Input, Select, Modal, Card, Avatar, Badge } from '@/components/ui';
-import { useToast } from '@/components/ui/Toast';
-import { formatTime, cn, getErrorMessage, formatCurrency } from '@/lib/utils';
-import AppointmentReward from '@/components/loyalty/AppointmentReward';
-import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
-import { Appointment, AppointmentStatus, APPOINTMENT_STATUSES, Service } from '@/types';
 import { createClient } from '@/lib/supabase/client';
+import { Button, Modal } from '@/components/ui';
+import { useToast } from '@/components/ui/Toast';
+import { cn, getErrorMessage } from '@/lib/utils';
+import { appointmentErrorMessage, appointmentRevenue, money, time12 } from '@/lib/appointments';
+import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
+import { useAgenda, type AgendaAppointment } from '@/components/agenda/useAgenda';
+import { STATUS_FILTERS, STATUS_UI, matchesStatus, type StatusFilter } from '@/components/agenda/agendaUi';
+import DayView from '@/components/agenda/DayView';
+import WeekView from '@/components/agenda/WeekView';
+import MonthView from '@/components/agenda/MonthView';
+import AppointmentPanel, { type PanelAction } from '@/components/agenda/AppointmentPanel';
 import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
 import CancelAppointmentModal from '@/components/appointments/CancelAppointmentModal';
-import { PAYMENT_LABELS, SOURCE_LABELS, appointmentErrorMessage, money, whatsappLink } from '@/lib/appointments';
-import { formatPhone } from '@/lib/phone';
+import RescheduleModal from '@/components/appointments/RescheduleModal';
+import NewAppointmentModal from '@/components/appointments/NewAppointmentModal';
 
-const STATUS_COLORS: Record<AppointmentStatus, string> = {
-  pending: 'warning',
-  confirmed: 'accent',
-  in_progress: 'info',
-  completed: 'success',
-  cancelled: 'error',
-  no_show: 'error',
-};
-
-const emptyForm = {
-  client_phone: '',
-  client_name: '',
-  service_id: '',
-  barber_id: '',
-  date: '',
-  start_time: '',
-  notes: '',
-};
+type View = 'day' | 'week' | 'month';
+const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export default function AppointmentsPage() {
-  const { appointments, updateStatus, deleteAppointment, getAppointmentsByDate, refresh } = useAppointments();
-  // Cliente identificado por celular (lookup_client_by_phone)
-  const [phoneMatch, setPhoneMatch] = useState<
-    { id: string; name: string; visits_total: number; rewards_available: number } | null | 'none'
-  >(null);
-  const { barbers } = useBarbers();
   const { showToast } = useToast();
-  
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [toComplete, setToComplete] = useState<Appointment | null>(null);
-  const [toCancel, setToCancel] = useState<Appointment | null>(null);
-  const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [view, setView] = useState<View>('day');
+  const [cursor, setCursor] = useState(new Date());
+  const [barberFilter, setBarberFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newWeb, setNewWeb] = useState<{ id: string; date: string; start_time: string; client_name: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [toComplete, setToComplete] = useState<AgendaAppointment | null>(null);
+  const [toCancel, setToCancel] = useState<AgendaAppointment | null>(null);
+  const [toMove, setToMove] = useState<AgendaAppointment | null>(null);
+  const [toDelete, setToDelete] = useState<AgendaAppointment | null>(null);
+  const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
-    if (!isValidMobile(form.client_phone)) {
-      setPhoneMatch(null);
-      return;
-    }
-    const t = setTimeout(async () => {
-      const { data } = await createClient().rpc('lookup_client_by_phone', { p_phone: form.client_phone });
-      const row = Array.isArray(data) ? data[0] : data;
-      setPhoneMatch(row ? row : 'none');
-    }, 300);
-    return () => clearTimeout(t);
-  }, [form.client_phone]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const set = () => setIsDesktop(mq.matches);
+    set();
+    mq.addEventListener('change', set);
+    return () => mq.removeEventListener('change', set);
+  }, []);
 
-  const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-  const dayAppointments = getAppointmentsByDate(selectedDateStr);
-  // Premios de fidelización de los clientes del día; se recargan cuando cambian las citas
-  const loyalty = useLoyaltyForClients(dayAppointments.map((a) => a.client_id));
+  // Rango a cargar según la vista
+  const { from, to } = useMemo(() => {
+    if (view === 'day') return { from: ymd(cursor), to: ymd(cursor) };
+    if (view === 'week') {
+      const s = startOfWeek(cursor, { weekStartsOn: 1 });
+      return { from: ymd(s), to: ymd(addDays(s, 6)) };
+    }
+    return {
+      from: ymd(startOfWeek(startOfMonth(cursor), { weekStartsOn: 1 })),
+      to: ymd(endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 })),
+    };
+  }, [view, cursor]);
+
+  const onNewWeb = useCallback((a: { id: string; date: string; start_time: string; client_name: string | null }) => setNewWeb(a), []);
+  const agenda = useAgenda(from, to, onNewWeb);
+
+  const filtered = useMemo(
+    () =>
+      agenda.appointments
+        .filter((a) => (barberFilter === 'all' || a.barber_id === barberFilter) && matchesStatus(a.status, statusFilter))
+        .sort((x, y) => (x.date + x.start_time).localeCompare(y.date + y.start_time)),
+    [agenda.appointments, barberFilter, statusFilter]
+  );
+  const visibleBarbers = barberFilter === 'all' ? agenda.barbers : agenda.barbers.filter((b) => b.id === barberFilter);
+  const selected = agenda.appointments.find((a) => a.id === selectedId) ?? null;
+
+  const loyalty = useLoyaltyForClients(agenda.appointments.map((a) => a.client_id));
   useEffect(() => {
     loyalty.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointments]);
+  }, [agenda.appointments]);
+  const hasReward = useCallback(
+    (clientId: string | null) => !!clientId && loyalty.forClient(clientId).some((b) => b.rewards_available > 0),
+    [loyalty]
+  );
 
-  useEffect(() => {
-    createClient()
-      .from('services')
-      .select('*')
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data }) => {
-        if (data) setServices(data);
-      });
-  }, []);
-
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
-  const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 });
-
-  const generateCalendarDays = () => {
-    const days = [];
-    let day = startDate;
-    while (day <= endDate) {
-      days.push(day);
-      day = addDays(day, 1);
-    }
-    return days;
-  };
-
-  const getAppointmentsForDay = (date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return appointments.filter(a => a.date === dateStr);
-  };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    const hasPhone = form.client_phone.trim() !== '';
-    if (hasPhone && !isValidMobile(form.client_phone)) newErrors.client_phone = 'Celular inválido';
-    if (hasPhone && phoneMatch === 'none' && form.client_name.trim().length < 2)
-      newErrors.client_name = 'Es un cliente nuevo: escribe su nombre';
-    if (!form.service_id) newErrors.service_id = 'Selecciona un servicio';
-    if (!form.barber_id) newErrors.barber_id = 'Selecciona un barbero';
-    if (!form.date) newErrors.date = 'Selecciona una fecha';
-    if (!form.start_time) newErrors.start_time = 'Selecciona una hora';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const openCreateModal = () => {
-    setForm({ ...emptyForm, date: selectedDateStr });
-    setErrors({});
-    setIsModalOpen(true);
-    
-    const loadServices = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.from('services').select('*').eq('is_active', true);
-      if (data) setServices(data);
+  // Resumen del periodo (por barbero si hay filtro; ventas de productos solo con "todos")
+  const summary = useMemo(() => {
+    const scope = agenda.appointments.filter((a) => barberFilter === 'all' || a.barber_id === barberFilter);
+    const done = scope.filter((a) => a.status === 'completed');
+    const services = done.reduce((s, a) => s + appointmentRevenue(a), 0);
+    return {
+      total: scope.filter((a) => a.status !== 'cancelled').length,
+      completed: done.length,
+      open: scope.filter((a) => ['pending', 'confirmed', 'in_progress'].includes(a.status)).length,
+      noShow: scope.filter((a) => a.status === 'no_show').length,
+      services,
+      products: barberFilter === 'all' ? agenda.productSales : 0,
     };
-    loadServices();
+  }, [agenda.appointments, agenda.productSales, barberFilter]);
+
+  const step = (dir: 1 | -1) =>
+    setCursor((c) => (view === 'day' ? addDays(c, dir) : view === 'week' ? addDays(c, 7 * dir) : addMonths(c, dir)));
+
+  const label =
+    view === 'day'
+      ? format(cursor, "EEEE d 'de' MMMM", { locale: es })
+      : view === 'week'
+        ? `${format(new Date(`${from}T00:00:00`), "d 'de' MMM", { locale: es })} – ${format(new Date(`${to}T00:00:00`), "d 'de' MMM yyyy", { locale: es })}`
+        : format(cursor, 'MMMM yyyy', { locale: es });
+
+  const openDay = (d: Date) => {
+    setCursor(d);
+    setView('day');
   };
 
-  const openDeleteModal = (appointment: Appointment) => {
-    setAppointmentToDelete(appointment);
-    setIsDeleteModalOpen(true);
+  const setStatus = async (a: AgendaAppointment, status: 'confirmed' | 'in_progress' | 'no_show', msg: string) => {
+    setBusy(true);
+    const { error } = await createClient().from('appointments').update({ status }).eq('id', a.id);
+    setBusy(false);
+    if (error) return showToast(appointmentErrorMessage(error), 'error');
+    showToast(msg, 'success');
+    agenda.reload();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setIsSubmitting(true);
-    // La base de datos identifica (o crea) al cliente por su celular, valida el
-    // horario y, si hay celular, encola la confirmación por WhatsApp.
-    const { error } = await createClient().rpc('create_staff_appointment', {
-      p_barber: form.barber_id,
-      p_service: form.service_id,
-      p_date: form.date,
-      p_time: form.start_time,
-      p_name: form.client_name.trim() || null,
-      p_phone: form.client_phone.trim() || null,
-      p_source: 'staff',
-      p_notes: form.notes.trim() || null,
-    });
-
-    setIsSubmitting(false);
-
-    if (error) {
-      const m = error.message;
-      showToast(
-        m.includes('slot_unavailable')
-          ? 'Ese barbero ya tiene una cita a esa hora.'
-          : m.includes('invalid_phone')
-            ? 'El celular no es válido.'
-            : m.includes('invalid_name')
-              ? 'Es un cliente nuevo: escribe su nombre.'
-              : getErrorMessage(error),
-        'error'
-      );
-    } else {
-      showToast('Cita agendada correctamente', 'success');
-      setIsModalOpen(false);
-      refresh();
-    }
-  };
-
-  const handleStatusChange = async (id: string, status: AppointmentStatus) => {
-    const appointment = appointments.find((a) => a.id === id);
-    // Completar = cobrar (complete_appointment); cancelar pide confirmación y motivo
-    if (status === 'completed') return setToComplete(appointment ?? null);
-    if (status === 'cancelled') return setToCancel(appointment ?? null);
-
-    const { error } = await updateStatus(id, status);
-    if (error) {
-      showToast(appointmentErrorMessage(error), 'error');
-    } else {
-      showToast(`Estado actualizado a ${APPOINTMENT_STATUSES[status]}`, 'success');
-    }
+  const onAction = (action: PanelAction) => {
+    const a = selected;
+    if (!a) return;
+    if (action === 'confirm') return setStatus(a, 'confirmed', 'Cita confirmada');
+    if (action === 'start') return setStatus(a, 'in_progress', 'Cita en curso');
+    if (action === 'no_show') return setStatus(a, 'no_show', 'Marcada como «No llegó»');
+    if (action === 'complete') return setToComplete(a);
+    if (action === 'cancel') return setToCancel(a);
+    if (action === 'reschedule') return setToMove(a);
+    if (action === 'delete') return setToDelete(a);
   };
 
   const handleDelete = async () => {
-    if (!appointmentToDelete) return;
-    
-    setIsSubmitting(true);
-    const { error } = await deleteAppointment(appointmentToDelete.id);
-    setIsSubmitting(false);
-
-    if (error) {
-      showToast(getErrorMessage(error), 'error');
-    } else {
-      showToast('Cita eliminada', 'success');
-      setIsDeleteModalOpen(false);
-    }
+    if (!toDelete) return;
+    setBusy(true);
+    const { error } = await createClient().from('appointments').delete().eq('id', toDelete.id);
+    setBusy(false);
+    if (error) return showToast(getErrorMessage(error), 'error');
+    showToast('Cita eliminada', 'success');
+    setToDelete(null);
+    setSelectedId(null);
+    agenda.reload();
   };
 
-  const calendarDays = generateCalendarDays();
-  const weekDays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const panel = selected && (
+    <AppointmentPanel
+      appointment={selected}
+      rules={loyalty.rules}
+      balances={loyalty.forClient(selected.client_id)}
+      busy={busy}
+      onAction={onAction}
+      onClose={isDesktop ? () => setSelectedId(null) : undefined}
+      onRewardChanged={() => {
+        agenda.reload();
+        loyalty.reload();
+      }}
+    />
+  );
+
+  // En celular la vista Día es una lista (la cuadrícula por barbero no cabe)
+  const mobileDayList = (
+    <ul className="divide-y divide-surface-300">
+      {filtered.length === 0 && (
+        <li className="py-10 text-center text-inverse/60">
+          <Scissors className="w-8 h-8 mx-auto mb-2 opacity-40" aria-hidden="true" />
+          No hay citas para este día
+        </li>
+      )}
+      {filtered.map((a) => {
+        const ui = STATUS_UI[a.status];
+        return (
+          <li key={a.id}>
+            <button type="button" onClick={() => setSelectedId(a.id)} className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-surface-container-low">
+              <span className="w-[84px] shrink-0 text-sm font-bold whitespace-nowrap">{time12(a.start_time)}</span>
+              <span className="w-1 self-stretch rounded" style={{ background: ui.border }} aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className={cn('font-bold truncate', (a.status === 'cancelled' || a.status === 'no_show') && 'line-through')}>
+                    {a.client?.name ?? a.client_name ?? 'Cliente'}
+                  </span>
+                  {a.source === 'web' && <span className="shrink-0 text-[10px] px-1 rounded border border-primary-200 text-primary-700">WEB</span>}
+                </span>
+                <span className="block text-sm text-inverse/70 truncate">
+                  {a.service?.name} · {a.barber?.name}
+                </span>
+              </span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0" style={{ background: ui.bg, color: ui.text }}>
+                {ui.label}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-heading font-bold text-inverse">Citas</h1>
-          <p className="text-sm sm:text-base text-inverse/60">Gestiona el calendario de citas</p>
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-inverse">Agenda</h1>
+          <p className="text-sm text-inverse/70">Citas por barbero. Se actualiza sola cuando entra una reserva.</p>
         </div>
-        <Button onClick={openCreateModal} className="text-sm sm:text-base py-2 sm:py-0">
-          <Plus className="w-4 h-4 mr-1 sm:mr-2" />
-          <span className="hidden sm:inline">Nueva Cita</span>
-          <span className="sm:hidden">Agregar</span>
+        <Button onClick={() => setCreating(true)}>
+          <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+          Nueva cita
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
-        <Card className="lg:col-span-2 !p-3 sm:!p-4 lg:!p-6">
-          <div className="flex items-center justify-between mb-3 sm:mb-6">
+      {newWeb && (
+        <div role="status" className="flex items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+          <Bell className="w-5 h-5 text-primary-700 shrink-0" aria-hidden="true" />
+          <p className="flex-1 text-sm">
+            <strong>Nueva reserva web:</strong> {newWeb.client_name ?? 'Cliente'} ·{' '}
+            {format(new Date(`${newWeb.date}T00:00:00`), "EEE d 'de' MMM", { locale: es })} a las {time12(newWeb.start_time)}
+          </p>
+          <button
+            type="button"
+            className="text-sm font-bold text-primary-700 underline"
+            onClick={() => {
+              setCursor(new Date(`${newWeb.date}T00:00:00`));
+              setView('day');
+              setSelectedId(newWeb.id);
+              setNewWeb(null);
+            }}
+          >
+            Ver
+          </button>
+          <button type="button" aria-label="Cerrar aviso" className="text-sm text-inverse/70" onClick={() => setNewWeb(null)}>
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Barra de herramientas */}
+      <div className="flex flex-wrap items-center gap-2 bg-white rounded-xl border border-surface-300 p-2">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => step(-1)} aria-label="Anterior" className="p-2 rounded hover:bg-surface-container-low">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCursor(new Date())}
+            className={cn('px-3 min-h-[36px] rounded-lg border text-sm font-semibold', isToday(cursor) ? 'border-primary text-primary-700' : 'border-surface-300')}
+          >
+            Hoy
+          </button>
+          <button type="button" onClick={() => step(1)} aria-label="Siguiente" className="p-2 rounded hover:bg-surface-container-low">
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+        <h2 className="font-heading font-bold text-base sm:text-lg first-letter:uppercase mr-auto px-1">{label}</h2>
+
+        <div role="group" aria-label="Vista" className="flex rounded-lg border border-surface-300 overflow-hidden">
+          {(['day', 'week', 'month'] as View[]).map((v) => (
             <button
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              className="p-1 sm:p-2 text-inverse/50 hover:text-inverse hover:bg-surface-container-low rounded transition-colors touch-target"
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={cn('px-3 min-h-[36px] text-sm font-semibold', view === v ? 'bg-inverse text-white' : 'hover:bg-surface-container-low')}
             >
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              {v === 'day' ? 'Día' : v === 'week' ? 'Semana' : 'Mes'}
             </button>
-            <h2 className="text-base sm:text-lg font-semibold text-inverse capitalize">
-              {format(currentMonth, 'MMMM yyyy', { locale: es })}
-            </h2>
-            <button
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              className="p-1 sm:p-2 text-inverse/50 hover:text-inverse hover:bg-surface-container-low rounded transition-colors touch-target"
-            >
-              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {weekDays.map((day) => (
-              <div key={day} className="text-center text-sm font-medium text-inverse/50 py-2">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {calendarDays.map((day, i) => {
-              const dayAppointments = getAppointmentsForDay(day);
-              const isSelected = isSameDay(day, selectedDate);
-              const isCurrentMonth = isSameMonth(day, currentMonth);
-              
-              return (
-                <button
-                  key={i}
-                  onClick={() => setSelectedDate(day)}
-                  className={cn(
-                    'relative p-2 rounded text-sm transition-all min-h-[60px]',
-                    isCurrentMonth ? 'text-inverse' : 'text-inverse/30',
-                    isSelected && 'bg-primary text-white',
-                    isToday(day) && !isSelected && 'bg-surface-container-low',
-                  )}
-                >
-                  <span className={cn(
-                    'block w-7 h-7 mx-auto rounded-full flex items-center justify-center',
-                    isToday(day) && 'bg-primary/10 text-primary font-semibold'
-                  )}>
-                    {format(day, 'd')}
-                  </span>
-                  {dayAppointments.length > 0 && (
-                    <div className="flex items-center justify-center gap-0.5 mt-1 flex-wrap">
-                      {dayAppointments.slice(0, 3).map((a, j) => (
-                        <div 
-                          key={j} 
-                          className={cn(
-                            'w-1.5 h-1.5 rounded-sm',
-                            a.status === 'completed' ? 'bg-success' :
-                            a.status === 'cancelled' ? 'bg-error' :
-                            'bg-primary'
-                          )}
-                        />
-                      ))}
-                      {dayAppointments.length > 3 && (
-                        <span className="text-[10px] text-inverse/50">+{dayAppointments.length - 3}</span>
-                      )}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card>
-          <div className="overflow-x-hidden">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-inverse">
-                {format(selectedDate, "EEEE d 'de' MMMM", { locale: es })}
-              </h3>
-              <Badge variant={isToday(selectedDate) ? 'accent' : 'default'}>
-                {isToday(selectedDate) ? 'Hoy' : `${dayAppointments.length} citas`}
-              </Badge>
-            </div>
-
-            {dayAppointments.length === 0 ? (
-              <div className="text-center py-8">
-                <Scissors className="w-10 h-10 mx-auto text-inverse/30 mb-3" />
-                <p className="text-inverse/50 text-sm">No hay citas para este día</p>
-                <Button variant="ghost" size="sm" onClick={openCreateModal} className="mt-2">
-                  Agendar cita
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3 overflow-x-hidden">
-              {dayAppointments.map((appointment) => (
-                <div
-                  key={appointment.id}
-                  className="p-3 bg-surface-container-low rounded-lg space-y-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-medium text-inverse">
-                        {formatTime(appointment.start_time)}
-                      </span>
-                    </div>
-                    <Badge variant={STATUS_COLORS[appointment.status] as any}>
-                      {APPOINTMENT_STATUSES[appointment.status]}
-                    </Badge>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-inverse/50" />
-                    <span className="text-sm font-semibold text-inverse">{appointment.client?.name ?? appointment.client_name ?? 'Cliente'}</span>
-                    {appointment.barber?.name && <span className="ml-auto text-xs font-semibold text-inverse/70">con {appointment.barber.name}</span>}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Scissors className="w-4 h-4 text-inverse/50" />
-                    <span className="text-sm text-inverse/70">
-                      {appointment.service?.name} · {money(Number(appointment.price ?? appointment.service?.price ?? 0))}
-                    </span>
-                    {appointment.source && SOURCE_LABELS[appointment.source] && (
-                      <span className="ml-auto text-[11px] font-bold px-1.5 py-0.5 rounded border border-primary-200 text-primary-700">
-                        {SOURCE_LABELS[appointment.source]}
-                      </span>
-                    )}
-                  </div>
-
-                  {appointment.client?.phone && appointment.client.phone !== 'mostrador' && (
-                    <div className="flex items-center justify-between gap-2 text-sm">
-                      <span className="text-inverse/70">{formatPhone(appointment.client.phone)}</span>
-                      {whatsappLink(appointment.client.phone) && (
-                        <a
-                          href={whatsappLink(appointment.client.phone)!}
-                          target="_blank"
-                          rel="noopener"
-                          className="text-xs font-bold px-2 py-1 rounded bg-success/15 text-success hover:bg-success/25"
-                        >
-                          WhatsApp
-                        </a>
-                      )}
-                    </div>
-                  )}
-
-                  {appointment.notes && <p className="text-sm text-inverse/80">“{appointment.notes}”</p>}
-
-                  <AppointmentReward
-                    appointment={appointment}
-                    rules={loyalty.rules}
-                    balances={loyalty.forClient(appointment.client_id)}
-                    clientName={appointment.client?.name}
-                    clientPhone={appointment.client?.phone}
-                    onChanged={() => refresh()}
-                  />
-
-                  {appointment.status === 'completed' && appointment.paid_amount != null && (
-                    <p className="text-sm font-semibold text-success">
-                      Cobrado {money(Number(appointment.paid_amount))}
-                      {appointment.payment_method && ` · ${PAYMENT_LABELS[appointment.payment_method] ?? appointment.payment_method}`}
-                    </p>
-                  )}
-                  {appointment.status === 'cancelled' && appointment.cancel_reason && (
-                    <p className="text-xs text-inverse/60">Motivo: {appointment.cancel_reason}</p>
-                  )}
-
-                  {['pending', 'confirmed', 'in_progress'].includes(appointment.status) && (
-                    <div className="space-y-2 pt-2 border-t border-surface-container-low">
-                      <div className="flex items-center gap-2">
-                        {appointment.status === 'pending' && (
-                          <button
-                            onClick={() => handleStatusChange(appointment.id, 'confirmed')}
-                            className="flex-1 min-h-[36px] text-xs font-semibold bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
-                          >
-                            Confirmar
-                          </button>
-                        )}
-                        {appointment.status !== 'in_progress' && (
-                          <button
-                            onClick={() => handleStatusChange(appointment.id, 'in_progress')}
-                            className="flex-1 min-h-[36px] text-xs font-semibold bg-info/15 text-info rounded hover:bg-info/25 transition-colors"
-                          >
-                            Iniciar
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'completed')}
-                          className="flex-[2] min-h-[36px] text-xs font-bold bg-primary text-white rounded hover:bg-primary-600 transition-colors"
-                        >
-                          Completar y cobrar
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'no_show')}
-                          className="flex-1 min-h-[34px] text-xs font-semibold border border-surface-container-low rounded hover:bg-surface transition-colors"
-                        >
-                          No llegó
-                        </button>
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'cancelled')}
-                          className="flex-1 min-h-[34px] text-xs font-semibold text-error border border-error/30 rounded hover:bg-error/10 transition-colors"
-                        >
-                          Cancelar…
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {appointment.status !== 'completed' && (
-                    <button
-                      onClick={() => openDeleteModal(appointment)}
-                      className="w-full p-1 text-[11px] text-inverse/50 hover:text-error transition-colors"
-                    >
-                      Eliminar (creada por error)
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          </div>
-        </Card>
+          ))}
+        </div>
+        <select aria-label="Barbero" className="input-field !w-auto !py-1.5 text-sm" value={barberFilter} onChange={(e) => setBarberFilter(e.target.value)}>
+          <option value="all">Todos los barberos</option>
+          {agenda.barbers.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Estado" className="input-field !w-auto !py-1.5 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}>
+          {STATUS_FILTERS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Nueva Cita"
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Celular del cliente"
-            type="tel"
-            inputMode="tel"
-            placeholder="300 123 4567"
-            value={form.client_phone}
-            onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
-            error={errors.client_phone}
-          />
-          {phoneMatch && phoneMatch !== 'none' ? (
-            <p className="text-sm -mt-2 text-success">
-              {phoneMatch.name} · {phoneMatch.visits_total} visitas
-              {phoneMatch.rewards_available > 0 && ` · tiene ${phoneMatch.rewards_available} premio(s)`}
-            </p>
-          ) : (
-            <>
-              {phoneMatch === 'none' && <p className="text-sm -mt-2 text-inverse/60">Cliente nuevo: se creará con este celular.</p>}
-              {form.client_phone.trim() === '' && (
-                <p className="text-xs -mt-2 text-warning">Sin celular la cita queda como cliente de mostrador y no suma sellos.</p>
-              )}
-              <Input
-                label={phoneMatch === 'none' ? 'Nombre del cliente nuevo' : 'Nombre (opcional)'}
-                value={form.client_name}
-                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-                error={errors.client_name}
+      {/* Resumen */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <Stat label="Citas" value={String(summary.total)} />
+        <Stat label="Completadas" value={String(summary.completed)} />
+        <Stat label="Por atender" value={String(summary.open)} />
+        <Stat label="No llegaron" value={String(summary.noShow)} />
+        <Stat
+          label="Ingresos"
+          value={money(summary.services + summary.products)}
+          sub={summary.products ? `Servicios ${money(summary.services)} · Productos ${money(summary.products)}` : 'Servicios cobrados'}
+          className="col-span-2 sm:col-span-1"
+        />
+      </div>
+
+      {agenda.error && <p className="text-sm text-error">No se pudo cargar la agenda: {agenda.error}</p>}
+
+      <div className={cn('grid gap-4', selected && isDesktop && 'lg:grid-cols-[1fr_340px]')}>
+        <div className={cn('bg-white rounded-xl border border-surface-300 overflow-hidden min-w-0', agenda.loading && 'opacity-60')}>
+          {view === 'day' &&
+            (isDesktop ? (
+              <DayView
+                date={from}
+                barbers={visibleBarbers}
+                appointments={filtered}
+                schedules={agenda.schedules}
+                breaks={agenda.breaks}
+                overrides={agenda.overrides}
+                timeOff={agenda.timeOff}
+                selectedId={selectedId}
+                rewardsByClient={hasReward}
+                onSelect={setSelectedId}
               />
-            </>
-          )}
-
-          <Select
-            label="Servicio"
-            placeholder="Selecciona un servicio"
-            value={form.service_id}
-            onChange={(e) => setForm({ ...form, service_id: e.target.value })}
-            error={errors.service_id}
-            options={services.map(s => ({ value: s.id, label: `${s.name} · ${money(Number(s.price))}` }))}
-          />
-
-          <Select
-            label="Barbero"
-            placeholder="Selecciona un barbero"
-            value={form.barber_id}
-            onChange={(e) => setForm({ ...form, barber_id: e.target.value })}
-            error={errors.barber_id}
-            options={barbers.filter(b => b.is_active).map(b => ({ value: b.id, label: b.name }))}
-          />
-
-          <Input
-            label="Fecha"
-            type="date"
-            value={form.date}
-            onChange={(e) => setForm({ ...form, date: e.target.value })}
-            error={errors.date}
-          />
-
-          <Input
-            label="Hora"
-            type="time"
-            value={form.start_time}
-            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-            error={errors.start_time}
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-inverse/70 mb-2">
-              Notas (opcional)
-            </label>
-            <textarea
-              className="input-field resize-none"
-              rows={2}
-              placeholder="Notas sobre la cita..."
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            ) : (
+              mobileDayList
+            ))}
+          {view === 'week' && (
+            <WeekView
+              weekStart={new Date(`${from}T00:00:00`)}
+              appointments={filtered}
+              selectedId={selectedId}
+              showBarber={barberFilter === 'all'}
+              onSelect={setSelectedId}
+              onOpenDay={openDay}
             />
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setIsModalOpen(false)}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" isLoading={isSubmitting} className="flex-1">
-              Agendar
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title="Eliminar Cita"
-        size="sm"
-      >
-        <p className="text-inverse/60 mb-6">
-          Eliminar es solo para citas creadas por error: se borra sin dejar historial y no se avisa al cliente. Si el cliente no vendrá, usa «Cancelar cita». Esta acción no se puede deshacer.
-        </p>
-        <div className="flex gap-3">
-          <Button
-            variant="ghost"
-            onClick={() => setIsDeleteModalOpen(false)}
-            className="flex-1"
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleDelete}
-            isLoading={isSubmitting}
-            className="flex-1"
-          >
-            Eliminar
-          </Button>
+          )}
+          {view === 'month' && <MonthView month={cursor} appointments={filtered} onOpenDay={openDay} />}
         </div>
-      </Modal>
+
+        {selected && isDesktop && (
+          <aside className="bg-white rounded-xl border border-surface-300 p-4 self-start lg:sticky lg:top-4" aria-label="Detalle de la cita">
+            {panel}
+          </aside>
+        )}
+      </div>
+
+      {selected && !isDesktop && (
+        <Modal isOpen onClose={() => setSelectedId(null)} title="Detalle de la cita">
+          {panel}
+        </Modal>
+      )}
+
+      <NewAppointmentModal
+        open={creating}
+        initial={{ date: view === 'day' ? from : ymd(new Date()), barberId: barberFilter === 'all' ? null : barberFilter }}
+        barbers={agenda.barbers}
+        onClose={() => setCreating(false)}
+        onDone={() => {
+          setCreating(false);
+          showToast('Cita agendada', 'success');
+          agenda.reload();
+        }}
+      />
+
+      <RescheduleModal
+        target={
+          toMove && {
+            id: toMove.id,
+            clientName: toMove.client?.name ?? toMove.client_name,
+            date: toMove.date,
+            startTime: toMove.start_time,
+            barberId: toMove.barber_id,
+            serviceId: toMove.service_id,
+            hasReward: !!toMove.reward_rule_id,
+          }
+        }
+        barbers={agenda.barbers}
+        schedules={agenda.schedules}
+        onClose={() => setToMove(null)}
+        onDone={() => {
+          setToMove(null);
+          showToast('Cita reprogramada', 'success');
+          agenda.reload();
+        }}
+      />
 
       <CompleteAppointmentModal
         target={
@@ -619,7 +407,7 @@ export default function AppointmentsPage() {
         onDone={(total) => {
           showToast(`Cobro registrado: ${money(total)}`, 'success');
           setToComplete(null);
-          refresh();
+          agenda.reload();
         }}
       />
 
@@ -636,9 +424,34 @@ export default function AppointmentsPage() {
         onDone={() => {
           showToast('Cita cancelada', 'success');
           setToCancel(null);
-          refresh();
+          agenda.reload();
         }}
       />
+
+      <Modal isOpen={!!toDelete} onClose={() => setToDelete(null)} title="Eliminar cita" size="sm">
+        <p className="text-inverse/70 mb-6">
+          Eliminar es solo para citas creadas por error: se borra sin dejar historial y no se avisa al cliente. Si el cliente no vendrá, usa «Cancelar…». Esta acción no
+          se puede deshacer.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="ghost" onClick={() => setToDelete(null)} className="flex-1">
+            Volver
+          </Button>
+          <Button variant="danger" onClick={handleDelete} isLoading={busy} className="flex-1">
+            Eliminar
+          </Button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub, className }: { label: string; value: string; sub?: string; className?: string }) {
+  return (
+    <div className={cn('bg-white rounded-xl border border-surface-300 px-3 py-2.5', className)}>
+      <p className="text-xs font-semibold text-inverse/70">{label}</p>
+      <p className="text-lg font-heading font-bold text-inverse">{value}</p>
+      {sub && <p className="text-[11px] text-inverse/70 truncate">{sub}</p>}
     </div>
   );
 }

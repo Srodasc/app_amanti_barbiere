@@ -22,10 +22,12 @@ export async function GET(request: Request, { params }: { params: { token: strin
   }
 
   const db = anon();
-  const [{ data, error }, { data: loyalty }] = await Promise.all([
+  const [{ data, error }, { data: loyalty }, { data: resched }] = await Promise.all([
     db.rpc('get_appointment_by_token', { p_token: params.token }),
     // Avance de fidelización del cliente (si la migración aún no está, simplemente no se muestra)
     db.rpc('get_loyalty_by_token', { p_token: params.token }),
+    // ¿Se puede reprogramar? (si la migración de la Fase 3 aún no está, no se ofrece)
+    db.rpc('reschedule_info_by_token', { p_token: params.token }),
   ]);
   if (error) {
     console.error('get_appointment_by_token', error.message);
@@ -34,7 +36,18 @@ export async function GET(request: Request, { params }: { params: { token: strin
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 });
 
-  return NextResponse.json({ ...row, loyalty: Array.isArray(loyalty) ? loyalty : [] }, { headers: NO_STORE });
+  const r = Array.isArray(resched) ? resched[0] : resched;
+  return NextResponse.json(
+    {
+      ...row,
+      loyalty: Array.isArray(loyalty) ? loyalty : [],
+      can_reschedule: !!r?.can_reschedule,
+      reschedules_left: r?.reschedules_left ?? 0,
+      duration_minutes: r?.duration_minutes ?? null,
+      deadline_hours: r?.deadline_hours ?? null,
+    },
+    { headers: NO_STORE }
+  );
 }
 
 /** Cancelar con el enlace privado, respetando el plazo configurado. */
