@@ -5,10 +5,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('es-MX', {
+  // Pesos colombianos, sin decimales: $ 35.000
+  return new Intl.NumberFormat('es-CO', {
     style: 'currency',
-    currency: 'MXN',
-  }).format(amount);
+    currency: 'COP',
+    maximumFractionDigits: 0,
+  }).format(Number(amount) || 0);
 }
 
 export function formatDate(date: string | Date): string {

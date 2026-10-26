@@ -14,7 +14,8 @@ import {
   Scissors,
   Menu,
   UserCog,
-  Clock
+  Clock,
+  Package
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { useReminders } from '@/hooks';
@@ -26,6 +27,7 @@ const navItems = [
   { href: '/dashboard/appointments', icon: Calendar, label: 'Citas' },
   { href: '/dashboard/barbers', icon: UserCog, label: 'Barberos' },
   { href: '/dashboard/clients', icon: Users, label: 'Clientes' },
+  { href: '/dashboard/products', icon: Package, label: 'Productos' },
   { href: '/dashboard/expenses', icon: DollarSign, label: 'Gastos' },
   { href: '/dashboard/reminders', icon: Bell, label: 'Recordatorios', badge: true },
 ];
