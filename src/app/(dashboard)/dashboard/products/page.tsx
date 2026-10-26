@@ -44,7 +44,7 @@ const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? nul
 const n = (v: unknown) => Number(v) || 0;
 const when = (ts: string) => format(new Date(ts), "d MMM yyyy, h:mm a", { locale: es });
 
-const emptyProduct = { name: '', category: '', sku: '', sale_price: '', cost_price: '', min_stock: '0', initial_stock: '', is_active: true };
+const emptyProduct = { name: '', category: '', sku: '', sale_price: '', cost_price: '', min_stock: '0', initial_stock: '', initial_as_expense: false, is_active: true };
 
 export default function ProductsPage() {
   const supabase = () => createClient();
@@ -173,6 +173,7 @@ export default function ProductsPage() {
       cost_price: String(p.cost_price),
       min_stock: String(p.min_stock),
       initial_stock: '',
+      initial_as_expense: false,
       is_active: p.is_active,
     });
     setFormError('');
@@ -210,13 +211,13 @@ export default function ProductsPage() {
         return setFormError(productErrorMessage(error));
       }
       if (initial > 0) {
-        // Inventario inicial: no es una compra nueva, así que no se registra como gasto
+        // Inventario inicial: por defecto no es gasto (ya lo tenías); se puede marcar si lo acabas de comprar
         const { error: e2 } = await supabase().rpc('register_stock_entry', {
           p_product: data.id,
           p_quantity: initial,
           p_unit_cost: cost || null,
           p_note: 'Inventario inicial',
-          p_as_expense: false,
+          p_as_expense: form.initial_as_expense && cost > 0,
         });
         if (e2) showToast(`Producto creado, pero no se cargó el stock inicial: ${productErrorMessage(e2)}`, 'error');
       }
@@ -228,7 +229,14 @@ export default function ProductsPage() {
       }
     }
     setSaving(false);
-    showToast(editing === 'new' ? 'Producto creado' : 'Producto actualizado', 'success');
+    showToast(
+      editing === 'new' && initial > 0 && form.initial_as_expense && cost > 0
+        ? `Producto creado y gasto de ${formatCurrency(initial * cost)} registrado`
+        : editing === 'new'
+          ? 'Producto creado'
+          : 'Producto actualizado',
+      'success'
+    );
     setEditing(null);
     refreshAll();
   };
@@ -528,7 +536,26 @@ export default function ProductsPage() {
               Activo (si lo desactivas deja de aparecer para vender, pero conserva su historial)
             </label>
           )}
-          {editing === 'new' && <p className="text-xs text-inverse/50">El stock inicial no se registra como gasto. Las compras siguientes, con "Entrada", sí.</p>}
+          {editing === 'new' && Number(form.initial_stock) > 0 && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.initial_as_expense}
+                  onChange={(e) => setForm({ ...form, initial_as_expense: e.target.checked })}
+                />
+                Registrar este stock inicial como gasto (márcalo si lo acabas de comprar)
+              </label>
+              {form.initial_as_expense && !(Number(form.cost_price) > 0) && (
+                <p className="text-xs text-warning">Escribe el costo para poder crear el gasto.</p>
+              )}
+              {form.initial_as_expense && Number(form.cost_price) > 0 && (
+                <p className="text-xs text-inverse/60">
+                  Gasto: <strong>{formatCurrency(Number(form.initial_stock) * Number(form.cost_price))}</strong>
+                </p>
+              )}
+            </div>
+          )}
           {formError && <p className="text-sm text-error">{formError}</p>}
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setEditing(null)} className="flex-1">Cancelar</Button>
@@ -551,6 +578,9 @@ export default function ProductsPage() {
           </label>
           {entry.as_expense && Number(entry.quantity) > 0 && Number(entry.unit_cost) > 0 && (
             <p className="text-sm">Gasto: <strong>{formatCurrency(Number(entry.quantity) * Number(entry.unit_cost))}</strong></p>
+          )}
+          {entry.as_expense && !(Number(entry.unit_cost) > 0) && (
+            <p className="text-xs text-warning">Sin costo por unidad no se crea el gasto.</p>
           )}
           {formError && <p className="text-sm text-error">{formError}</p>}
           <div className="flex gap-3 pt-2">
