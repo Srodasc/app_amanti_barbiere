@@ -52,7 +52,8 @@ export default function AvailabilityExtras({
   barberId: string;
   canEditBreaks: boolean;
 }) {
-  const supabase = createClient();
+  // Se crea al usarlo (en efectos y eventos), no al renderizar: así el build no necesita las variables.
+  const supabase = () => createClient();
   const { showToast } = useToast();
 
   const [breaks, setBreaks] = useState<Break[]>([]);
@@ -72,14 +73,14 @@ export default function AvailabilityExtras({
   const load = useCallback(async () => {
     setLoading(true);
     const [b, o, t] = await Promise.all([
-      supabase.from('barber_breaks').select('id, day_of_week, start_time, end_time').eq('barber_id', barberId).order('start_time'),
-      supabase
+      supabase().from('barber_breaks').select('id, day_of_week, start_time, end_time').eq('barber_id', barberId).order('start_time'),
+      supabase()
         .from('schedule_overrides')
         .select('id, date, is_available, start_time, end_time, reason')
         .eq('barber_id', barberId)
         .gte('date', today())
         .order('date'),
-      supabase
+      supabase()
         .from('time_off')
         .select('id, starts_at, ends_at, reason')
         .eq('barber_id', barberId)
@@ -101,7 +102,7 @@ export default function AvailabilityExtras({
 
   // ---------- citas que chocan con lo que se va a bloquear ----------
   const appointmentsBetween = async (fromDate: string, toDate: string) => {
-    const { data } = await supabase
+    const { data } = await supabase()
       .from('appointments')
       .select('id, date, start_time, end_time, client:clients(name), client_name')
       .eq('barber_id', barberId)
@@ -163,7 +164,7 @@ export default function AvailabilityExtras({
 
     await withConflictCheck('break', conflicts, async () => {
       setSaving(true);
-      const { error } = await supabase.from('barber_breaks').insert(
+      const { error } = await supabase().from('barber_breaks').insert(
         breakForm.days.map((d) => ({ barber_id: barberId, day_of_week: d, start_time: breakForm.start, end_time: breakForm.end }))
       );
       setSaving(false);
@@ -190,7 +191,7 @@ export default function AvailabilityExtras({
 
     await withConflictCheck('override', conflicts, async () => {
       setSaving(true);
-      const { error } = await supabase.from('schedule_overrides').upsert(
+      const { error } = await supabase().from('schedule_overrides').upsert(
         {
           barber_id: barberId,
           date: ovForm.date,
@@ -227,7 +228,7 @@ export default function AvailabilityExtras({
 
     await withConflictCheck('time_off', conflicts, async () => {
       setSaving(true);
-      const { error } = await supabase
+      const { error } = await supabase()
         .from('time_off')
         .insert({ barber_id: barberId, starts_at: starts, ends_at: ends, reason: toForm.reason.trim() || null });
       setSaving(false);
@@ -237,7 +238,7 @@ export default function AvailabilityExtras({
 
   const remove = async (table: 'barber_breaks' | 'schedule_overrides' | 'time_off', id: string) => {
     if (!confirm('¿Eliminar? Ese tiempo volverá a quedar disponible para reservas.')) return;
-    const { error } = await supabase.from(table).delete().eq('id', id);
+    const { error } = await supabase().from(table).delete().eq('id', id);
     if (error) showToast(error.message, 'error');
     else {
       showToast('Eliminado', 'success');

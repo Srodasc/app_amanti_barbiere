@@ -27,7 +27,8 @@ const ESTADOS: Record<string, string> = {
 
 export default function MiDiaPage() {
   const router = useRouter();
-  const supabase = createClient();
+  // Se crea al usarlo (en efectos y eventos), no al renderizar: así el build no necesita las variables.
+  const supabase = () => createClient();
   const [rows, setRows] = useState<Row[]>([]);
   const [date, setDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(true);
@@ -38,9 +39,9 @@ export default function MiDiaPage() {
   useEffect(() => {
     // El barbero vinculado a esta sesión (un administrador puede no tener uno)
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase().auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from('barbers').select('id').eq('auth_id', user.id).maybeSingle();
+      const { data } = await supabase().from('barbers').select('id').eq('auth_id', user.id).maybeSingle();
       setMyBarberId(data?.id ?? null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,7 +49,7 @@ export default function MiDiaPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabase()
       .from('appointments')
       .select('id, date, start_time, end_time, status, notes, service:services(name), client:clients(name, phone)')
       .eq('date', date)
@@ -64,13 +65,13 @@ export default function MiDiaPage() {
 
   const setStatus = async (id: string, status: string) => {
     setError('');
-    const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+    const { error } = await supabase().from('appointments').update({ status }).eq('id', id);
     if (error) setError(error.message);
     else load();
   };
 
   const salir = async () => {
-    await supabase.auth.signOut();
+    await supabase().auth.signOut();
     router.push('/login');
   };
 
