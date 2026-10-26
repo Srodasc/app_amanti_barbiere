@@ -11,6 +11,9 @@ import Turnstile from '@/components/Turnstile';
 import { cn, formatCurrency } from '@/lib/utils';
 import { isValidMobile } from '@/lib/phone';
 import { CONSENT_TEXT } from '@/lib/privacy';
+import { downloadIcs, googleCalendarUrl, mapsUrl } from '@/lib/calendar';
+import { slugify } from '@/lib/slug';
+import { formatPhone, normalizePhone } from '@/lib/phone';
 
 /*
  * Reserva pública (v2).
@@ -46,12 +49,23 @@ const longDate = (d: string) => cap(format(parseISO(d), "EEEE d 'de' MMMM", { lo
 const shortDate = (d: string) => cap(format(parseISO(d), "EEE d MMM", { locale: es }));
 const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 
-/** Hora local de Bogotá (UTC−5, sin horario de verano) → UTC para calendarios */
-function toUtcStamp(date: string, time: string, plusMinutes = 0) {
-  const [y, mo, d] = date.split('-').map(Number);
-  const [h, mi] = time.split(':').map(Number);
-  const ms = Date.UTC(y, mo - 1, d, h + 5, mi + plusMinutes);
-  return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+// Datos del cliente recordados SOLO en este dispositivo (si el cliente lo pide)
+const SAVED_KEY = 'amanti:cliente';
+function readSaved(): { name: string; phone: string } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_KEY) ?? 'null');
+    return v && typeof v.name === 'string' && typeof v.phone === 'string' && isValidMobile(v.phone) ? { name: v.name, phone: v.phone } : null;
+  } catch {
+    return null;
+  }
+}
+function writeSaved(v: { name: string; phone: string } | null) {
+  try {
+    if (v) localStorage.setItem(SAVED_KEY, JSON.stringify(v));
+    else localStorage.removeItem(SAVED_KEY);
+  } catch {
+    /* modo privado o almacenamiento bloqueado: no se recuerda */
+  }
 }
 
 export default function BookingPage() {
@@ -73,6 +87,10 @@ export default function BookingPage() {
   const [slot, setSlot] = useState<Slot | null>(null);
 
   const [contact, setContact] = useState({ name: '', phone: '', notes: '' });
+  const [remember, setRemember] = useState(false);
+  const [saved, setSaved] = useState<{ name: string; phone: string } | null>(null);
+  const [editSaved, setEditSaved] = useState(false);
+  const [presetBarber, setPresetBarber] = useState(false); // llegó con /book?barbero=...
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -92,7 +110,17 @@ export default function BookingPage() {
     try {
       const [s, b] = await Promise.all([fetch('/api/services').then((r) => r.json()), fetch('/api/barbers').then((r) => r.json())]);
       setServices(Array.isArray(s) ? s : []);
-      setBarbers(Array.isArray(b) ? b : []);
+      const list: Barber[] = Array.isArray(b) ? b : [];
+      setBarbers(list);
+      // Enlace directo de un barbero: /book?barbero=andres (o su id)
+      const wanted = new URLSearchParams(window.location.search).get('barbero')?.trim().toLowerCase();
+      if (wanted) {
+        const found = list.find((x) => x.id === wanted || slugify(x.name) === wanted) ?? list.find((x) => slugify(x.name).split('-')[0] === wanted);
+        if (found) {
+          setBarber(found);
+          setPresetBarber(true);
+        }
+      }
     } catch {
       showToast('No se pudo cargar la información. Revisa tu conexión.', 'error');
     }
@@ -101,6 +129,12 @@ export default function BookingPage() {
   }, []);
   useEffect(() => {
     loadData();
+    const v = readSaved();
+    if (v) {
+      setSaved(v);
+      setRemember(true);
+      setContact((c) => ({ ...c, name: v.name, phone: v.phone }));
+    }
   }, [loadData]);
 
   // ---------- días disponibles ----------
@@ -189,10 +223,11 @@ export default function BookingPage() {
   const pickService = (s: Service) => {
     setService(s);
     setSlot(null);
-    setStep('barber');
+    setStep(presetBarber ? 'when' : 'barber');
   };
   const pickBarber = (b: Barber | null) => {
     setBarber(b);
+    setPresetBarber(false);
     setSlot(null);
     setStep('when');
   };
@@ -263,6 +298,11 @@ export default function BookingPage() {
         address: info?.business_address || null,
         loyalty: Array.isArray(info?.loyalty) ? info.loyalty : [],
       });
+      // Recordar (o olvidar) los datos en este dispositivo, como pidió el cliente
+      const mine = { name: contact.name.trim(), phone: contact.phone };
+      writeSaved(remember ? mine : null);
+      setSaved(remember ? mine : null);
+      setEditSaved(false);
       setStep('done');
       window.scrollTo({ top: 0 });
     } catch {
@@ -276,6 +316,7 @@ export default function BookingPage() {
     setStep('service');
     setService(null);
     setBarber(null);
+    setPresetBarber(false);
     setDate(null);
     setSlot(null);
     setBooked(null);
@@ -397,6 +438,24 @@ export default function BookingPage() {
         {step === 'service' && (
           <section className="space-y-4">
             <h1 className="font-heading text-2xl font-bold">¿Qué servicio quieres?</h1>
+            {presetBarber && barber && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-primary-50 border border-primary-200">
+                <Avatar name={barber.name} src={barber.photo_url} size="md" />
+                <p className="flex-1 text-sm">
+                  Reservas con <strong>{barber.name}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPresetBarber(false);
+                    setBarber(null);
+                  }}
+                  className="text-sm font-semibold text-primary px-1 py-2"
+                >
+                  Ver todos
+                </button>
+              </div>
+            )}
             {loading ? (
               <p className="py-8 text-center text-inverse-50">Cargando...</p>
             ) : services.length === 0 ? (
@@ -600,41 +659,92 @@ export default function BookingPage() {
               <button type="button" onClick={() => setStep('when')} className="text-sm font-semibold text-primary pt-1">Cambiar fecha u hora</button>
             </div>
 
-            <div className="space-y-1.5">
-              <label htmlFor="nombre" className="block text-sm font-semibold">Nombre</label>
-              <input
-                id="nombre"
-                autoComplete="name"
-                placeholder="Tu nombre"
-                value={contact.name}
-                onChange={(e) => setContact({ ...contact, name: e.target.value })}
-                className="w-full h-[52px] px-4 rounded-lg border border-surface-500 bg-white text-base focus:outline-none focus:border-primary"
-                aria-invalid={!!errors.name}
-              />
-              {errors.name && <p className="text-sm text-error">{errors.name}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="celular" className="block text-sm font-semibold">Celular (WhatsApp)</label>
-              <div className="flex h-[52px] rounded-lg border border-surface-500 bg-white overflow-hidden focus-within:border-primary">
-                <span className="flex items-center px-3 bg-surface-200 border-r border-surface-500 font-semibold text-inverse-50">+57</span>
-                <input
-                  id="celular"
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel-national"
-                  placeholder="300 123 4567"
-                  value={contact.phone}
-                  onChange={(e) => setContact({ ...contact, phone: e.target.value })}
-                  className="flex-1 min-w-0 px-4 text-base bg-transparent focus:outline-none"
-                  aria-invalid={!!errors.phone}
-                />
+            {saved && !editSaved && contact.name === saved.name && contact.phone === saved.phone ? (
+              <div className="p-4 bg-white border border-surface-300 rounded-xl flex items-center gap-3">
+                <span className="w-11 h-11 rounded-full bg-primary-50 text-primary-700 font-bold flex items-center justify-center shrink-0" aria-hidden="true">
+                  {saved.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-inverse-50">Reservas como</span>
+                  <span className="block font-bold truncate">{saved.name}</span>
+                  <span className="block text-sm">{formatPhone(normalizePhone(saved.phone))}</span>
+                </span>
+                <button type="button" onClick={() => setEditSaved(true)} className="text-sm font-semibold text-primary px-1 py-3 shrink-0">
+                  Cambiar
+                </button>
               </div>
-              {errors.phone ? (
-                <p className="text-sm text-error">{errors.phone}</p>
-              ) : (
-                <p className="text-sm text-inverse-50">Con tu celular sumas sellos para tus premios.</p>
-              )}
+            ) : (
+              <>
+              <div className="space-y-1.5">
+                <label htmlFor="nombre" className="block text-sm font-semibold">Nombre</label>
+                <input
+                  id="nombre"
+                  autoComplete="name"
+                  placeholder="Tu nombre"
+                  value={contact.name}
+                  onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                  className="w-full h-[52px] px-4 rounded-lg border border-surface-500 bg-white text-base focus:outline-none focus:border-primary"
+                  aria-invalid={!!errors.name}
+                />
+                {errors.name && <p className="text-sm text-error">{errors.name}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="celular" className="block text-sm font-semibold">Celular (WhatsApp)</label>
+                <div className="flex h-[52px] rounded-lg border border-surface-500 bg-white overflow-hidden focus-within:border-primary">
+                  <span className="flex items-center px-3 bg-surface-200 border-r border-surface-500 font-semibold text-inverse-50">+57</span>
+                  <input
+                    id="celular"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    placeholder="300 123 4567"
+                    value={contact.phone}
+                    onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+                    className="flex-1 min-w-0 px-4 text-base bg-transparent focus:outline-none"
+                    aria-invalid={!!errors.phone}
+                  />
+                </div>
+                {errors.phone ? (
+                  <p className="text-sm text-error">{errors.phone}</p>
+                ) : (
+                  <p className="text-sm text-inverse-50">Con tu celular sumas sellos para tus premios.</p>
+                )}
+              </div>
+              </>
+            )}
+
+            <div className="space-y-1">
+              <label className="flex gap-3 items-center text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="w-[22px] h-[22px] shrink-0 accent-[#775a19]"
+                />
+                <span>Recordar mi nombre y celular en este dispositivo</span>
+              </label>
+              <p className="text-xs text-inverse-50 pl-[34px]">
+                Se guardan solo aquí, para no escribirlos la próxima vez. No lo actives en un celular o computador compartido.
+                {saved && (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      className="text-primary underline font-semibold"
+                      onClick={() => {
+                        writeSaved(null);
+                        setSaved(null);
+                        setRemember(false);
+                        setEditSaved(false);
+                        setContact((c) => ({ ...c, name: '', phone: '' }));
+                      }}
+                    >
+                      Olvidar mis datos
+                    </button>
+                  </>
+                )}
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -752,49 +862,17 @@ function Confirmation({
     }
   };
 
-  // Archivo .ics: lo abren el calendario del iPhone, Android y Outlook
-  const downloadIcs = () => {
-    const start = toUtcStamp(booked.date, booked.time);
-    const end = toUtcStamp(booked.date, booked.time, service.duration_minutes);
-    const esc = (s: string) => s.replace(/[\\,;]/g, (m) => `\\${m}`).replace(/\n/g, '\\n');
-    const ics = [
-      'BEGIN:VCALENDAR',
-      'VERSION:2.0',
-      'PRODID:-//Amanti Barbiere//Reservas//ES',
-      'BEGIN:VEVENT',
-      `UID:${booked.token}@amanti`,
-      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
-      `DTSTART:${start}`,
-      `DTEND:${end}`,
-      `SUMMARY:${esc(title)}`,
-      `DESCRIPTION:${esc(details)}`,
-      booked.address ? `LOCATION:${esc(booked.address)}` : '',
-      'BEGIN:VALARM',
-      'TRIGGER:-PT2H',
-      'ACTION:DISPLAY',
-      `DESCRIPTION:${esc(title)}`,
-      'END:VALARM',
-      'END:VEVENT',
-      'END:VCALENDAR',
-    ]
-      .filter(Boolean)
-      .join('\r\n');
-    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'cita-amanti-barbiere.ics';
-    a.click();
-    URL.revokeObjectURL(url);
+  const ev = {
+    uid: booked.token,
+    date: booked.date,
+    time: booked.time,
+    minutes: service.duration_minutes,
+    title,
+    details,
+    location: booked.address,
   };
-
-  const googleUrl =
-    'https://calendar.google.com/calendar/render?action=TEMPLATE' +
-    `&text=${encodeURIComponent(title)}` +
-    `&dates=${toUtcStamp(booked.date, booked.time)}/${toUtcStamp(booked.date, booked.time, service.duration_minutes)}` +
-    `&details=${encodeURIComponent(details)}` +
-    (booked.address ? `&location=${encodeURIComponent(booked.address)}` : '');
-
-  const mapsUrl = booked.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(booked.address)}` : null;
+  const googleUrl = googleCalendarUrl(ev);
+  const maps = mapsUrl(booked.address);
   const prog = booked.loyalty.find((l) => l.visits_required > 0) ?? null;
 
   return (
@@ -830,12 +908,12 @@ function Confirmation({
         </div>
       </div>
 
-      <div className={cn('grid gap-2', mapsUrl ? 'grid-cols-2' : 'grid-cols-1')}>
-        <button type="button" onClick={downloadIcs} className="min-h-[52px] rounded-lg border border-surface-400 bg-white font-semibold text-sm flex items-center justify-center gap-2">
+      <div className={cn('grid gap-2', maps ? 'grid-cols-2' : 'grid-cols-1')}>
+        <button type="button" onClick={() => downloadIcs(ev)} className="min-h-[52px] rounded-lg border border-surface-400 bg-white font-semibold text-sm flex items-center justify-center gap-2">
           <CalendarPlus className="w-4 h-4" aria-hidden="true" /> A mi calendario
         </button>
-        {mapsUrl && (
-          <a href={mapsUrl} target="_blank" rel="noopener" className="min-h-[52px] rounded-lg border border-surface-400 bg-white font-semibold text-sm flex items-center justify-center gap-2 text-inverse no-underline">
+        {maps && (
+          <a href={maps} target="_blank" rel="noopener" className="min-h-[52px] rounded-lg border border-surface-400 bg-white font-semibold text-sm flex items-center justify-center gap-2 text-inverse no-underline">
             <MapPin className="w-4 h-4" aria-hidden="true" /> Cómo llegar
           </a>
         )}

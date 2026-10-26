@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Phone, Mail, Scissors, Clock, KeyRound } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Phone, Mail, Scissors, Clock, KeyRound, Link2 } from 'lucide-react';
+import { barberBookingPath } from '@/lib/slug';
 import { useBarbers } from '@/hooks';
 import { Button, Input, Modal, Card, Avatar, Badge, Table } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -132,6 +133,17 @@ export default function BarbersPage() {
     }
   };
 
+  // Enlace para Instagram o WhatsApp: la reserva abre con este barbero ya elegido
+  const copyBookingLink = async (barber: Barber) => {
+    const url = `${window.location.origin}${barberBookingPath(barber.name)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast(`Enlace copiado: ${url}`, 'success');
+    } catch {
+      window.prompt('Copia el enlace de reserva:', url);
+    }
+  };
+
   const columns = [
     {
       key: 'name',
@@ -184,9 +196,19 @@ export default function BarbersPage() {
     {
       key: 'actions',
       header: '',
-      className: 'w-40',
+      className: 'w-48',
       render: (barber: Barber) => (
         <div className="flex items-center gap-2 justify-end">
+          {barber.is_active && (
+            <button
+              onClick={(e) => { e.stopPropagation(); copyBookingLink(barber); }}
+              className="p-2 text-inverse/60 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+              title="Copiar enlace para reservar con este barbero"
+              aria-label={`Copiar enlace de reserva de ${barber.name}`}
+            >
+              <Link2 className="w-4 h-4" />
+            </button>
+          )}
           <Link
             href={`/dashboard/barbers/${barber.id}/schedules`}
             className="p-2 text-inverse/60 hover:text-primary hover:bg-surface rounded-lg transition-colors"
