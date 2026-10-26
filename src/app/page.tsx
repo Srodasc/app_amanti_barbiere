@@ -136,6 +136,7 @@ export default function Home() {
           <div className="flex items-center gap-6 text-sm text-inverse/50">
             <Link href="/book" className="hover:text-primary transition-colors">Reservar</Link>
             <Link href="/login" className="hover:text-primary transition-colors">Equipo</Link>
+            <Link href="/privacidad" className="hover:text-primary transition-colors">Política de datos</Link>
           </div>
           <p className="text-inverse/50 text-xs sm:text-sm">
             © 2024 Amanti Barbiere

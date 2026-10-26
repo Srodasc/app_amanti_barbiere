@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DATE_RE, TIME_RE, UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
 import { verifyCaptcha } from '@/lib/turnstile';
+import { CONSENT_VERSION } from '@/lib/privacy';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -50,6 +51,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Revisa los datos e inténtalo de nuevo.' }, { status: 400 });
   }
 
+  // Autorización de tratamiento de datos: obligatoria (Ley 1581 de 2012; el silencio no cuenta)
+  if (body.data_consent !== true) {
+    return NextResponse.json({ error: 'Para reservar debes autorizar el uso de tus datos.', code: 'consent' }, { status: 400 });
+  }
+
   // Captcha: después de validar el formato (barato) y antes de tocar la base de datos
   const captcha = await verifyCaptcha(body.captcha_token, clientIp(request));
   if (!captcha.ok) {
@@ -86,6 +92,13 @@ export async function POST(request: Request) {
   }
 
   const row = Array.isArray(data) ? data[0] : data;
+
+  // Prueba de la autorización: fecha y versión del texto aceptado, guardadas en el cliente
+  const { error: consentError } = await supabase.rpc('record_data_consent', {
+    p_token: row.cancel_token,
+    p_version: CONSENT_VERSION,
+  });
+  if (consentError) console.error('record_data_consent', consentError.message);
   return NextResponse.json(
     { id: row.appointment_id, cancel_token: row.cancel_token, barber_name: row.barber_name },
     { status: 201, headers: NO_STORE }
