@@ -123,7 +123,31 @@ export default function CompleteAppointmentModal({
     );
 
   return (
-    <Modal isOpen={!!target} onClose={onClose} title="Completar y cobrar" size="md">
+    <Modal
+      isOpen={!!target}
+      onClose={onClose}
+      title="Completar y cobrar"
+      size="md"
+      footer={
+        target && (
+          <div className="space-y-2">
+            {error && (
+              <p role="alert" className="text-sm text-error font-semibold">
+                {error}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
+                Cancelar
+              </Button>
+              <Button type="button" onClick={submit} isLoading={saving} className="flex-[2] whitespace-nowrap">
+                Cobrar {money(total)}
+              </Button>
+            </div>
+          </div>
+        )
+      }
+    >
       {target && (
         <div className="space-y-5">
           <p className="text-sm text-inverse/70 -mt-2">
@@ -132,28 +156,28 @@ export default function CompleteAppointmentModal({
           </p>
 
           <div className="rounded-xl border border-surface-300 bg-surface p-4 space-y-2 text-[15px]">
-            <div className="flex justify-between gap-2">
-              <span>
+            <div className="flex justify-between gap-3">
+              <span className="min-w-0 break-words">
                 {target.serviceName ?? 'Servicio'}
                 {target.hasReward && <span className="ml-2 text-xs font-semibold text-primary">(premio aplicado)</span>}
               </span>
-              <strong>{money(target.price)}</strong>
+              <strong className="shrink-0 whitespace-nowrap">{money(target.price)}</strong>
             </div>
             {extras
               .filter((e) => picked.includes(e.id))
               .map((e) => (
-                <div key={e.id} className="flex justify-between gap-2 text-primary-700">
-                  <span>+ {e.name}</span>
-                  <strong>{money(e.price)}</strong>
+                <div key={e.id} className="flex justify-between gap-3 text-primary-700">
+                  <span className="min-w-0 break-words">+ {e.name}</span>
+                  <strong className="shrink-0 whitespace-nowrap">{money(e.price)}</strong>
                 </div>
               ))}
             {cartLines.map((p) => (
-              <div key={p.id} className="flex justify-between gap-2 text-primary-700">
-                <span>
+              <div key={p.id} className="flex justify-between gap-3 text-primary-700">
+                <span className="min-w-0 break-words">
                   + {p.name}
                   {p.qty > 1 && ` ×${p.qty}`}
                 </span>
-                <strong>{money(p.qty * Number(p.sale_price))}</strong>
+                <strong className="shrink-0 whitespace-nowrap">{money(p.qty * Number(p.sale_price))}</strong>
               </div>
             ))}
             <div className="h-px bg-surface-300 my-1" />
@@ -194,7 +218,7 @@ export default function CompleteAppointmentModal({
                 <ul className="space-y-1.5">
                   {cartLines.map((p) => (
                     <li key={p.id} className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5">
-                      <span className="flex-1 min-w-0 text-sm font-semibold truncate">{p.name}</span>
+                      <span className="flex-1 min-w-0 text-sm font-semibold leading-tight line-clamp-2 break-words">{p.name}</span>
                       <button type="button" onClick={() => setQty(p, p.qty - 1)} aria-label={`Quitar uno de ${p.name}`} className="w-9 h-9 rounded-lg bg-white border border-surface-400 flex items-center justify-center">
                         <Minus className="w-4 h-4" />
                       </button>
@@ -234,7 +258,7 @@ export default function CompleteAppointmentModal({
 
           <div className="space-y-2">
             <p className="text-sm font-bold">Medio de pago</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label="Medio de pago">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Medio de pago">
               {(Object.keys(PAYMENT_LABELS) as (keyof typeof PAYMENT_LABELS)[]).map((k) => (
                 <button
                   key={k}
@@ -271,16 +295,6 @@ export default function CompleteAppointmentModal({
             {cartLines.length > 0 && ' Los productos se descuentan del inventario y quedan como venta del barbero, con el mismo medio de pago.'}
           </p>
 
-          {error && <p className="text-sm text-error">{error}</p>}
-
-          <div className="flex gap-3">
-            <Button type="button" variant="ghost" onClick={onClose} className="flex-1">
-              Cancelar
-            </Button>
-            <Button type="button" onClick={submit} isLoading={saving} className="flex-[2]">
-              Registrar cobro · {money(total)}
-            </Button>
-          </div>
         </div>
       )}
     </Modal>
