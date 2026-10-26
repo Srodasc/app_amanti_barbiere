@@ -9,7 +9,7 @@
 | Clientes con contraseña en texto plano y sesión falsificable | Sin cuentas de cliente: reserva con nombre + WhatsApp y enlace privado `/cita/<token>` |
 | Sin rol de barbero | `/mi-dia`: cada barbero ve y gestiona solo sus citas |
 | Sin recordatorios reales | Cola `notifications` + `/api/cron/reminders` (WhatsApp Cloud API) |
-| Horarios solo semanales | Además: descansos, excepciones por día y bloqueos (tablas listas; falta UI) |
+| Horarios solo semanales | Además: descansos fijos, días especiales y bloqueos, con pantalla en Barberos → Horarios y en `/mi-dia` |
 | Fidelización sin configurar | `loyalty_rules` / `loyalty_balances` y funciones listas; falta UI |
 
 ## Cómo aplicarlo (en este orden)
@@ -25,4 +25,4 @@
 ## Importante
 - Las contraseñas de clientes que estaban en texto plano se anularon (`password_hash = null`). Si alguien reutilizaba esa clave en otro sitio, conviene avisarle.
 - Los scripts destructivos viejos están en `supabase/legacy/`; no los ejecutes.
-- Pendiente recomendado: captcha (Cloudflare Turnstile) en la reserva y UI para descansos, excepciones y fidelización.
+- Pendiente recomendado: captcha (Cloudflare Turnstile) en la reserva y UI para fidelización.
