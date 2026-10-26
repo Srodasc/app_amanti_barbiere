@@ -25,7 +25,8 @@ export function useExpenses() {
     const { data, error } = await supabase
       .from('expenses')
       .select('*')
-      .eq('admin_id', adminId)
+      // Un solo negocio: todos los administradores ven lo mismo (la RLS ya limita a administradores).
+      // Antes se filtraba por admin_id y un segundo administrador no veía reservas ni gastos ajenos.
       .order('expense_date', { ascending: false });
 
     if (error) {
