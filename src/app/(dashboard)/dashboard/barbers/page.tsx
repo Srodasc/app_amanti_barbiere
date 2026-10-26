@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Phone, Mail, Scissors, Clock, KeyRound, Link2 } from 'lucide-react';
 import { barberBookingPath } from '@/lib/slug';
+import { normalizePhone, isValidMobile } from '@/lib/phone';
 import { useBarbers } from '@/hooks';
 import { Button, Input, Modal, Card, Avatar, Badge, Table } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -31,6 +32,7 @@ export default function BarbersPage() {
   const [accessBarber, setAccessBarber] = useState<Barber | null>(null);
   const [accessForm, setAccessForm] = useState({ email: '', password: '' });
   const [savingAccess, setSavingAccess] = useState(false);
+  const [accessDone, setAccessDone] = useState<{ name: string; email: string; phone: string | null } | null>(null);
 
   const openAccess = (barber: Barber) => {
     setAccessBarber(barber);
@@ -52,7 +54,9 @@ export default function BarbersPage() {
       showToast(data.error || 'No se pudo guardar el acceso', 'error');
       return;
     }
-    showToast(data.updated ? 'Acceso actualizado' : 'Acceso creado: ya puede entrar en /login', 'success');
+    showToast(data.updated ? 'Acceso actualizado' : 'Acceso creado', 'success');
+    // Siguiente paso: enviarle el enlace de la app para que la instale
+    setAccessDone({ name: accessBarber.name, email: accessForm.email.trim(), phone: accessBarber.phone });
     setAccessBarber(null);
   };
 
@@ -346,9 +350,9 @@ export default function BarbersPage() {
         title={`Acceso de ${accessBarber?.name ?? ''}`}
       >
         <form onSubmit={saveAccess} className="space-y-4">
-          <p className="text-sm text-inverse/60">
-            Con este correo y contraseña el barbero entra a <strong>/login</strong> y ve solo sus citas del día.
-            Si ya tiene acceso, esto actualiza sus datos.
+          <p className="text-sm text-inverse/70">
+            Con este correo y contraseña el barbero entra a su app <strong>Mi día</strong> (sus citas, cobros, ventas y comisiones).
+            Si ya tiene acceso, esto actualiza sus datos. Después podrás enviarle el enlace para instalarla.
           </p>
           <Input
             label="Correo"
@@ -366,8 +370,69 @@ export default function BarbersPage() {
             <Button type="button" variant="ghost" onClick={() => setAccessBarber(null)} className="flex-1">Cancelar</Button>
             <Button type="submit" isLoading={savingAccess} className="flex-1">Guardar acceso</Button>
           </div>
+          {accessForm.email && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!accessBarber) return;
+                setAccessDone({ name: accessBarber.name, email: accessForm.email.trim(), phone: accessBarber.phone });
+                setAccessBarber(null);
+              }}
+              className="w-full text-sm font-semibold text-primary-700 underline"
+            >
+              Ya tiene acceso: solo enviarle el enlace de la app
+            </button>
+          )}
         </form>
       </Modal>
+
+      <AppLinkModal done={accessDone} onClose={() => setAccessDone(null)} />
     </div>
+  );
+}
+
+/** Enlace de la app del barbero, para copiarlo o enviarlo por WhatsApp (sin la contraseña). */
+function AppLinkModal({ done, onClose }: { done: { name: string; email: string; phone: string | null } | null; onClose: () => void }) {
+  const { showToast } = useToast();
+  if (!done) return null;
+  const link = `${window.location.origin}/mi-dia`;
+  const first = done.name.split(' ')[0];
+  const message =
+    `Hola ${first}, esta es tu app de Amanti Barbiere para ver tus citas del día: ${link}\n\n` +
+    `Entra con tu correo ${done.email} y la contraseña que te di.\n\n` +
+    `Para tenerla como app: en Android ábrela en Chrome y toca "Instalar"; en iPhone ábrela en Safari, toca Compartir y "Agregar a inicio".`;
+  const phone = done.phone && isValidMobile(done.phone) ? normalizePhone(done.phone) : null;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      showToast('Mensaje copiado', 'success');
+    } catch {
+      window.prompt('Copia el mensaje:', message);
+    }
+  };
+  return (
+    <Modal isOpen onClose={onClose} title={`Enviar la app a ${first}`} size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-inverse/70">
+          Envíale este mensaje. La contraseña no va en el mensaje: díselo en persona.
+        </p>
+        <p className="text-sm bg-surface rounded-lg p-3 whitespace-pre-line break-words">{message}</p>
+        <div className="flex flex-col gap-2">
+          {phone && (
+            <a
+              href={`https://wa.me/${phone}?text=${encodeURIComponent(message)}`}
+              target="_blank"
+              rel="noopener"
+              className="h-11 rounded-lg bg-success text-white font-bold flex items-center justify-center"
+            >
+              Enviar por WhatsApp
+            </a>
+          )}
+          <Button variant={phone ? 'ghost' : 'primary'} onClick={copy}>
+            Copiar mensaje
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
