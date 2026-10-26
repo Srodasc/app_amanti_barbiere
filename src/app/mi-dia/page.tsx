@@ -7,6 +7,8 @@ import { es } from 'date-fns/locale';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui';
 import AvailabilityExtras from '@/components/schedule/AvailabilityExtras';
+import SaleForm from '@/components/products/SaleForm';
+import MySalesToday from '@/components/products/MySalesToday';
 
 type Row = {
   id: string;
@@ -33,7 +35,9 @@ export default function MiDiaPage() {
   const [date, setDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<'citas' | 'disponibilidad'>('citas');
+  const [tab, setTab] = useState<'citas' | 'vender' | 'disponibilidad'>('citas');
+  const [salesKey, setSalesKey] = useState(0);
+  const [saleMsg, setSaleMsg] = useState('');
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,18 +87,37 @@ export default function MiDiaPage() {
           <Button variant="ghost" size="sm" onClick={salir}>Salir</Button>
         </div>
         <div className="flex gap-2 mb-4">
-          {(['citas', 'disponibilidad'] as const).map((t) => (
+          {(['citas', 'vender', 'disponibilidad'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 py-2 rounded text-sm font-semibold ${tab === t ? 'bg-primary text-white' : 'bg-white text-inverse/70'}`}
             >
-              {t === 'citas' ? 'Mis citas' : 'Mi disponibilidad'}
+              {t === 'citas' ? 'Mis citas' : t === 'vender' ? 'Vender' : 'Disponibilidad'}
             </button>
           ))}
         </div>
 
-        {tab === 'disponibilidad' ? (
+        {tab === 'vender' ? (
+          myBarberId ? (
+            <div className="space-y-4">
+              <div className="bg-white rounded-lg shadow-sm p-4">
+                <h2 className="font-semibold mb-3">Vender productos</h2>
+                {saleMsg && <p className="text-sm text-success mb-3">{saleMsg}</p>}
+                <SaleForm
+                  key={salesKey}
+                  onDone={() => {
+                    setSaleMsg('Venta registrada.');
+                    setSalesKey((k) => k + 1);
+                  }}
+                />
+              </div>
+              <MySalesToday refreshKey={salesKey} />
+            </div>
+          ) : (
+            <p className="text-inverse/60">Esta cuenta no está vinculada a un barbero. Registra las ventas desde Dashboard → Productos.</p>
+          )
+        ) : tab === 'disponibilidad' ? (
           myBarberId ? (
             <AvailabilityExtras barberId={myBarberId} canEditBreaks={false} />
           ) : (

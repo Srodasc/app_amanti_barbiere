@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Avatar } from '@/components/ui';
 import { useAppointments, useClients, useExpenses } from '@/hooks';
 import { formatCurrency, formatTime } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 import { APPOINTMENT_STATUSES } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -29,13 +30,37 @@ export default function DashboardPage() {
   const { clients, isLoading: clientsLoading } = useClients();
   const { expenses, getExpensesThisMonth, isLoading: expensesLoading } = useExpenses();
   const [revenueData, setRevenueData] = useState<{ name: string; ingresos: number; gastos: number }[]>([]);
+  // Ventas de productos (últimos 6 meses) para sumarlas a los ingresos
+  const [productSales, setProductSales] = useState<{ total: number; created_at: string }[]>([]);
+
+  useEffect(() => {
+    const since = new Date();
+    since.setMonth(since.getMonth() - 6, 1);
+    since.setHours(0, 0, 0, 0);
+    createClient()
+      .from('product_sales')
+      .select('total, created_at')
+      .eq('status', 'completed')
+      .gte('created_at', since.toISOString())
+      .then(({ data }) => setProductSales((data ?? []).map((r) => ({ total: Number(r.total) || 0, created_at: r.created_at }))));
+  }, []);
+
+  // Mes en hora local (no UTC), como 'yyyy-MM'
+  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const thisMonth = monthKey(new Date());
+  const productsByMonth = (m: string) =>
+    productSales.filter((p) => monthKey(new Date(p.created_at)) === m).reduce((s, p) => s + p.total, 0);
+  const appointmentPrice = (a: { price?: number | null; service?: { price: number } | null }) =>
+    Number(a.price ?? a.service?.price ?? 0);
 
   const todayAppointments = getTodayAppointments();
   const completedToday = todayAppointments.filter(a => a.status === 'completed').length;
-  const totalRevenue = appointments
-    .filter(a => a.status === 'completed')
-    .reduce((sum, a) => sum + (a.service?.price || 0), 0);
-  const monthlyExpenses = getExpensesThisMonth().reduce((sum, e) => sum + e.amount, 0);
+  const serviceRevenueMonth = appointments
+    .filter(a => a.status === 'completed' && a.date.startsWith(thisMonth))
+    .reduce((sum, a) => sum + appointmentPrice(a), 0);
+  const productRevenueMonth = productsByMonth(thisMonth);
+  const totalRevenue = serviceRevenueMonth + productRevenueMonth;
+  const monthlyExpenses = getExpensesThisMonth().reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const netProfit = totalRevenue - monthlyExpenses;
 
   const appointmentsByStatus = [
@@ -51,17 +76,18 @@ export default function DashboardPage() {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
       const monthName = date.toLocaleDateString('es-MX', { month: 'short' });
-      const monthStr = date.toISOString().slice(0, 7);
+      const monthStr = monthKey(date);
       
       const monthAppointments = appointments.filter(a => 
         a.date.startsWith(monthStr) && a.status === 'completed'
       );
-      const monthRevenue = monthAppointments.reduce((sum, a) => sum + (a.service?.price || 0), 0);
+      const monthRevenue =
+        monthAppointments.reduce((sum, a) => sum + appointmentPrice(a), 0) + productsByMonth(monthStr);
       
       const monthExpenses = expenses.filter(e => 
         e.expense_date.startsWith(monthStr)
       );
-      const monthExpensesTotal = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const monthExpensesTotal = monthExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       months.push({ 
         name: monthName, 
@@ -70,7 +96,8 @@ export default function DashboardPage() {
       });
     }
     setRevenueData(months);
-  }, [appointments, expenses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments, expenses, productSales]);
 
   const isLoading = appointmentsLoading || clientsLoading || expensesLoading;
 
@@ -128,10 +155,10 @@ export default function DashboardPage() {
         <Card className="!p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-inverse/60">Ingresos Totales</p>
+              <p className="text-sm text-inverse/60">Ingresos del mes</p>
               <p className="text-3xl font-bold text-inverse mt-1">{formatCurrency(totalRevenue)}</p>
               <p className="text-xs text-success mt-1 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" /> Este mes
+                <TrendingUp className="w-3 h-3" /> Servicios {formatCurrency(serviceRevenueMonth)} · Productos {formatCurrency(productRevenueMonth)}
               </p>
             </div>
             <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center">
