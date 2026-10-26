@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DATE_RE, TIME_RE, UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
+import { verifyCaptcha } from '@/lib/turnstile';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -47,6 +48,16 @@ export async function POST(request: Request) {
     phone.length < 7 || phone.length > 20
   ) {
     return NextResponse.json({ error: 'Revisa los datos e inténtalo de nuevo.' }, { status: 400 });
+  }
+
+  // Captcha: después de validar el formato (barato) y antes de tocar la base de datos
+  const captcha = await verifyCaptcha(body.captcha_token, clientIp(request));
+  if (!captcha.ok) {
+    const text =
+      captcha.reason === 'unavailable'
+        ? 'No pudimos verificar la reserva en este momento. Intenta de nuevo en un minuto.'
+        : 'Confirma que no eres un robot e inténtalo de nuevo.';
+    return NextResponse.json({ error: text, code: 'captcha' }, { status: 403, headers: NO_STORE });
   }
 
   const supabase = createClient(
