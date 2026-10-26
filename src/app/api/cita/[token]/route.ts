@@ -21,7 +21,12 @@ export async function GET(request: Request, { params }: { params: { token: strin
     return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 });
   }
 
-  const { data, error } = await anon().rpc('get_appointment_by_token', { p_token: params.token });
+  const db = anon();
+  const [{ data, error }, { data: loyalty }] = await Promise.all([
+    db.rpc('get_appointment_by_token', { p_token: params.token }),
+    // Avance de fidelización del cliente (si la migración aún no está, simplemente no se muestra)
+    db.rpc('get_loyalty_by_token', { p_token: params.token }),
+  ]);
   if (error) {
     console.error('get_appointment_by_token', error.message);
     return NextResponse.json({ error: 'Error interno' }, { status: 500 });
@@ -29,7 +34,7 @@ export async function GET(request: Request, { params }: { params: { token: strin
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return NextResponse.json({ error: 'Cita no encontrada' }, { status: 404 });
 
-  return NextResponse.json(row, { headers: NO_STORE });
+  return NextResponse.json({ ...row, loyalty: Array.isArray(loyalty) ? loyalty : [] }, { headers: NO_STORE });
 }
 
 /** Cancelar con el enlace privado, respetando el plazo configurado. */

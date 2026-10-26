@@ -16,6 +16,7 @@ import {
   UserCog,
   Clock,
   Package,
+  Gift,
   ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/dashboard/barbers', icon: UserCog, label: 'Barberos' },
   { href: '/dashboard/clients', icon: Users, label: 'Clientes' },
   { href: '/dashboard/products', icon: Package, label: 'Productos' },
+  { href: '/dashboard/loyalty', icon: Gift, label: 'Fidelización' },
   { href: '/dashboard/expenses', icon: DollarSign, label: 'Gastos' },
   { href: '/dashboard/reminders', icon: Bell, label: 'Recordatorios', badge: true },
   { href: '/dashboard/users', icon: ShieldCheck, label: 'Usuarios' },

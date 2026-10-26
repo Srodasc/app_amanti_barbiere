@@ -9,6 +9,9 @@ import { Button } from '@/components/ui';
 import AvailabilityExtras from '@/components/schedule/AvailabilityExtras';
 import SaleForm from '@/components/products/SaleForm';
 import MySalesToday from '@/components/products/MySalesToday';
+import AppointmentReward from '@/components/loyalty/AppointmentReward';
+import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
+import { formatCurrency } from '@/lib/utils';
 
 type Row = {
   id: string;
@@ -17,6 +20,10 @@ type Row = {
   end_time: string;
   status: string;
   notes: string | null;
+  client_id: string | null;
+  service_id: string | null;
+  price: number | null;
+  reward_rule_id: string | null;
   service: { name: string } | { name: string }[] | null;
   client: { name: string; phone: string } | { name: string; phone: string }[] | null;
 };
@@ -35,6 +42,8 @@ export default function MiDiaPage() {
   const [date, setDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Premios de fidelización de los clientes del día (una sola consulta)
+  const loyalty = useLoyaltyForClients(rows.map((r) => r.client_id));
   const [tab, setTab] = useState<'citas' | 'vender' | 'disponibilidad'>('citas');
   const [salesKey, setSalesKey] = useState(0);
   const [saleMsg, setSaleMsg] = useState('');
@@ -55,7 +64,7 @@ export default function MiDiaPage() {
     setLoading(true);
     const { data, error } = await supabase()
       .from('appointments')
-      .select('id, date, start_time, end_time, status, notes, service:services(name), client:clients(name, phone)')
+      .select('id, date, start_time, end_time, status, notes, client_id, service_id, price, reward_rule_id, service:services(name), client:clients(name, phone)')
       .eq('date', date)
       .neq('status', 'cancelled')
       .order('start_time');
@@ -71,7 +80,10 @@ export default function MiDiaPage() {
     setError('');
     const { error } = await supabase().from('appointments').update({ status }).eq('id', id);
     if (error) setError(error.message);
-    else load();
+    else {
+      load();
+      loyalty.reload(); // completar suma visita; cancelar/no llegó devuelve el premio
+    }
   };
 
   const salir = async () => {
@@ -151,11 +163,23 @@ export default function MiDiaPage() {
                     <div>
                       <p className="font-bold text-lg">{r.start_time.slice(0, 5)} – {r.end_time.slice(0, 5)}</p>
                       <p className="font-semibold">{c?.name ?? 'Cliente'}</p>
-                      <p className="text-sm text-inverse/60">{sv?.name}</p>
+                      <p className="text-sm text-inverse/60">
+                        {sv?.name}
+                        {r.price != null && ` · ${formatCurrency(Number(r.price))}`}
+                      </p>
                       {r.notes && <p className="text-sm mt-1">“{r.notes}”</p>}
                     </div>
                     <span className="text-xs px-2 py-1 rounded bg-inverse/10">{ESTADOS[r.status] ?? r.status}</span>
                   </div>
+                  <AppointmentReward
+                    appointment={r}
+                    rules={loyalty.rules}
+                    balances={loyalty.forClient(r.client_id)}
+                    onChanged={() => {
+                      load();
+                      loyalty.reload();
+                    }}
+                  />
                   {activa && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {r.status !== 'in_progress' && <Button size="sm" variant="secondary" onClick={() => setStatus(r.id, 'in_progress')}>Iniciar</Button>}

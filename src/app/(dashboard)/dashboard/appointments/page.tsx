@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Plus, 
   ChevronLeft, 
@@ -28,7 +28,9 @@ import { useAppointments, useClients, useExpenses } from '@/hooks';
 import { useBarbers } from '@/hooks/useBarbers';
 import { Button, Input, Select, Modal, Card, Avatar, Badge } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { formatTime, cn, getErrorMessage } from '@/lib/utils';
+import { formatTime, cn, getErrorMessage, formatCurrency } from '@/lib/utils';
+import AppointmentReward from '@/components/loyalty/AppointmentReward';
+import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
 import { Appointment, AppointmentStatus, APPOINTMENT_STATUSES, Service } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 
@@ -51,7 +53,7 @@ const emptyForm = {
 };
 
 export default function AppointmentsPage() {
-  const { appointments, addAppointment, updateStatus, deleteAppointment, getAppointmentsByDate } = useAppointments();
+  const { appointments, addAppointment, updateStatus, deleteAppointment, getAppointmentsByDate, refresh } = useAppointments();
   const { clients } = useClients();
   const { barbers } = useBarbers();
   const { addExpense } = useExpenses();
@@ -72,6 +74,12 @@ export default function AppointmentsPage() {
 
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
   const dayAppointments = getAppointmentsByDate(selectedDateStr);
+  // Premios de fidelización de los clientes del día; se recargan cuando cambian las citas
+  const loyalty = useLoyaltyForClients(dayAppointments.map((a) => a.client_id));
+  useEffect(() => {
+    loyalty.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments]);
 
   useState(() => {
     const loadServices = async () => {
@@ -386,9 +394,16 @@ export default function AppointmentsPage() {
                   <div className="flex items-center gap-2">
                     <Scissors className="w-4 h-4 text-inverse/50" />
                     <span className="text-sm text-inverse/50">
-                      {appointment.service?.name} - ${appointment.service?.price}
+                      {appointment.service?.name} - {formatCurrency(Number(appointment.price ?? appointment.service?.price ?? 0))}
                     </span>
                   </div>
+
+                  <AppointmentReward
+                    appointment={appointment}
+                    rules={loyalty.rules}
+                    balances={loyalty.forClient(appointment.client_id)}
+                    onChanged={() => refresh()}
+                  />
 
                   {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
                     <div className="flex items-center gap-2 pt-2 border-t border-surface-container-low">
