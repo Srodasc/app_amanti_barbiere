@@ -125,30 +125,6 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="py-12 sm:py-16 px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <h2 className="text-2xl sm:text-3xl font-heading font-bold text-inverse mb-4 sm:mb-6">
-              ¿Ya tienes cuenta?
-            </h2>
-            <p className="text-inverse/60 mb-6 sm:mb-8 max-w-lg mx-auto">
-              Inicia sesión para ver tu historial de citas, próximas reservas y más.
-            </p>
-            <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-              <Link 
-                href="/client-login" 
-                className="btn-primary text-base px-6 py-3"
-              >
-                Iniciar Sesión
-              </Link>
-              <Link 
-                href="/register-client" 
-                className="btn-secondary text-base px-6 py-3"
-              >
-                Crear Cuenta
-              </Link>
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer className="py-8 sm:py-10 px-4 border-t border-surface-container-low">
@@ -159,7 +135,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-6 text-sm text-inverse/50">
             <Link href="/book" className="hover:text-primary transition-colors">Reservar</Link>
-            <Link href="/client-login" className="hover:text-primary transition-colors">Iniciar Sesión</Link>
+            <Link href="/login" className="hover:text-primary transition-colors">Equipo</Link>
           </div>
           <p className="text-inverse/50 text-xs sm:text-sm">
             © 2024 Amanti Barbiere

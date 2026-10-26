@@ -3,13 +3,14 @@ import { NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const publicSupabase = createPublicClient(supabaseUrl, supabaseAnonKey);
+const publicSupabase = createPublicClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
 
 export async function GET() {
   try {
+    // Columnas explícitas: correo y teléfono del barbero NO son públicos.
     const { data, error } = await publicSupabase
       .from('barbers')
-      .select('*')
+      .select('id, name, photo_url, specialty, is_active')
       .eq('is_active', true)
       .order('name');
 

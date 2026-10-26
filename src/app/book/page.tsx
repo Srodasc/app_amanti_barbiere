@@ -30,7 +30,9 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [schedules, setSchedules] = useState<Record<string, BarberSchedule[]>>({});
-  const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
+  const [slots, setSlots] = useState<{ time: string; barber_id: string }[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [cancelToken, setCancelToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -52,47 +54,47 @@ export default function BookingPage() {
     loadData();
   }, []);
 
-  // Recargar citas cuando cambia el barbero seleccionado o la fecha
+  // Los horarios libres los calcula la base de datos (horario, descansos, excepciones,
+  // bloqueos y citas existentes). El navegador ya no descarga la lista de citas.
   useEffect(() => {
-    const loadAppointments = async () => {
+    if (!selectedService || !selectedDate) {
+      setSlots([]);
+      return;
+    }
+    let cancelled = false;
+    const loadSlots = async () => {
+      setLoadingSlots(true);
       try {
-        const cacheBuster = Date.now();
-        const appointmentsRes = await fetch(`/api/appointments?_=${cacheBuster}`).then(r => r.json());
-        console.log('Loaded appointments:', appointmentsRes);
-        
-        if (Array.isArray(appointmentsRes)) {
-          const booked = new Set<string>();
-          appointmentsRes.forEach((apt: any) => {
-            if (apt.status !== 'cancelled') {
-              // Key: date_barberId_startTime
-              const key = `${apt.date}_${apt.barber_id || 'any'}_${apt.start_time}`;
-              console.log('Adding booked slot:', key);
-              booked.add(key);
-              
-              // También agregar sin barbero para cuando no hay barbero seleccionado
-              if (apt.barber_id) {
-                booked.add(`${apt.date}_any_${apt.start_time}`);
-              }
-            }
-          });
-          console.log('Booked slots:', booked);
-          setBookedSlots(booked);
+        const params = new URLSearchParams({
+          service: selectedService.id,
+          date: format(selectedDate, 'yyyy-MM-dd'),
+        });
+        if (selectedBarber) params.set('barber', selectedBarber.id);
+        const res = await fetch(`/api/slots?${params.toString()}`);
+        const data = await res.json();
+        if (!cancelled) setSlots(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) {
+          setSlots([]);
+          showToast('No se pudieron cargar los horarios', 'error');
         }
-      } catch (error) {
-        console.error('Error loading appointments:', error);
       }
+      if (!cancelled) setLoadingSlots(false);
     };
-    loadAppointments();
-  }, [selectedBarber, selectedDate]);
+    loadSlots();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedService, selectedBarber, selectedDate]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
       const cacheBuster = Date.now();
-      const [servicesRes, barbersRes, appointmentsRes] = await Promise.all([
+      const [servicesRes, barbersRes] = await Promise.all([
         fetch(`/api/services?_=${cacheBuster}`).then(r => r.json()),
         fetch(`/api/barbers?_=${cacheBuster}`).then(r => r.json()),
-        fetch(`/api/appointments?_=${cacheBuster}`).then(r => r.json()),
       ]);
 
       setServices(Array.isArray(servicesRes) ? servicesRes : []);
@@ -117,24 +119,6 @@ export default function BookingPage() {
       } else {
         setBarbers([]);
       }
-
-      // Cargar citas existentes para bloquear horarios ocupados
-      if (Array.isArray(appointmentsRes)) {
-        const booked = new Set<string>();
-        appointmentsRes.forEach((apt: any) => {
-          if (apt.status !== 'cancelled') {
-            // Key con barbero específico
-            const key = `${apt.date}_${apt.barber_id || 'any'}_${apt.start_time}`;
-            booked.add(key);
-            
-            // También bloquear "any" cuando hay barbero específico
-            if (apt.barber_id) {
-              booked.add(`${apt.date}_any_${apt.start_time}`);
-            }
-          }
-        });
-        setBookedSlots(booked);
-      }
     } catch (error) {
       console.error('Error loading data:', error);
       showToast('Error al cargar datos', 'error');
@@ -152,79 +136,7 @@ export default function BookingPage() {
       (s) => s.day_of_week === dayOfWeek && s.is_available
     );
     
-    console.log(`Checking working day for barber ${barber.id} on day ${dayOfWeek}:`, isWorking, 'schedules:', barberSchedules);
     return isWorking;
-  };
-
-  const getAvailableSlots = (barber: Barber | null, date: Date | null): string[] => {
-    if (!date) return [];
-    
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const dayOfWeek = date.getDay();
-    let barberSchedules: BarberSchedule[] = [];
-    
-    if (barber) {
-      barberSchedules = schedules[barber.id] || [];
-    } else {
-      // Si no hay barbero seleccionado, buscar cualquier barbero disponible
-      for (const b of barbers) {
-        barberSchedules = [...barberSchedules, ...(schedules[b.id] || [])];
-      }
-    }
-    
-    const daySchedule = barberSchedules.find(
-      (s) => s.day_of_week === dayOfWeek && s.is_available
-    );
-    
-    if (!daySchedule) return [];
-    
-    // Normalizar hora del schedule
-    const normalizeTime = (t: string) => {
-      const [h, m] = t.split(':');
-      return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
-    };
-    
-    const duration = selectedService?.duration_minutes || 30;
-    const slots: string[] = [];
-    let [h, m] = normalizeTime(daySchedule.start_time).split(':').map(Number);
-    const [endH, endM] = normalizeTime(daySchedule.end_time).split(':').map(Number);
-    
-    while (h * 60 + m < endH * 60 + endM) {
-      const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      
-      // Normalizar a HH:mm:ss para сравнение con la base de datos
-      const timeKey = `${timeStr}:00`;
-      
-      // Verificar si el horario está ocupado
-      const barberIdKey = barber?.id || 'any';
-      const keyWithBarber = `${dateStr}_${barberIdKey}_${timeKey}`;
-      const keyAny = `${dateStr}_any_${timeKey}`;
-      
-      // Verificar también sin segundos
-      const keyWithBarberShort = `${dateStr}_${barberIdKey}_${timeStr}`;
-      const keyAnyShort = `${dateStr}_any_${timeStr}`;
-      
-      const isBooked = bookedSlots.has(keyWithBarber) || 
-                       bookedSlots.has(keyWithBarberShort) ||
-                       bookedSlots.has(keyAny) ||
-                       bookedSlots.has(keyAnyShort) ||
-                       (!barber && barbers.some(b => 
-                         bookedSlots.has(`${dateStr}_${b.id}_${timeKey}`) ||
-                         bookedSlots.has(`${dateStr}_${b.id}_${timeStr}`)
-                       ));
-      
-      if (!isBooked) {
-        slots.push(timeStr);
-      }
-      
-      m += duration;
-      if (m >= 60) {
-        h += Math.floor(m / 60);
-        m = m % 60;
-      }
-    }
-    
-    return slots;
   };
 
   const goNext = () => {
@@ -262,13 +174,7 @@ export default function BookingPage() {
     setIsSubmitting(true);
     
     try {
-      // Calcular hora fin
-      const [h, m] = selectedTime.split(':').map(Number);
-      const duration = selectedService.duration_minutes;
-      const totalMinutes = h * 60 + m + duration;
-      const endTime = `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
-
-      // Crear cita (el API maneja la creación del cliente automáticamente)
+      // La hora fin, el cliente y el barbero (si eligió "cualquiera") los resuelve la base de datos.
       const appointmentRes = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,7 +183,6 @@ export default function BookingPage() {
           barber_id: selectedBarber?.id || null,
           date: format(selectedDate, 'yyyy-MM-dd'),
           start_time: selectedTime,
-          end_time: endTime,
           client_name: contactForm.name,
           client_phone: contactForm.phone,
           notes: contactForm.notes || null,
@@ -288,16 +193,16 @@ export default function BookingPage() {
 
       if (!appointmentRes.ok) {
         showToast(appointmentData.error || 'Error al agendar', 'error');
+        if (appointmentRes.status === 409) {
+          setSelectedTime(null);
+          setCurrentStep('time');
+          setSlots((prev) => prev.filter((sl) => sl.time !== selectedTime));
+        }
         setIsSubmitting(false);
         return;
       }
 
-      // Actualizar slots ocupados localmente
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      const barberIdKey = selectedBarber?.id || 'any';
-      const newBooked = new Set(bookedSlots);
-      newBooked.add(`${dateStr}_${barberIdKey}_${selectedTime}`);
-      setBookedSlots(newBooked);
+      setCancelToken(appointmentData.cancel_token ?? null);
 
       showToast('¡Cita agendada exitosamente!', 'success');
       setCurrentStep('confirm');
@@ -324,7 +229,7 @@ export default function BookingPage() {
   };
 
   const calendarDays = generateCalendarDays();
-  const availableSlots = getAvailableSlots(selectedBarber, selectedDate);
+  const availableSlots = slots.map((sl) => sl.time);
 
   return (
     <div className="min-h-screen bg-surface pb-safe">
@@ -527,7 +432,7 @@ export default function BookingPage() {
                 )}
               </h2>
 
-              {isLoading ? (
+              {isLoading || loadingSlots ? (
                 <div className="text-center py-8 text-inverse/60">Cargando...</div>
               ) : availableSlots.length === 0 ? (
                 <div className="text-center py-8">
@@ -673,6 +578,18 @@ export default function BookingPage() {
               <h2 className="text-2xl font-heading font-bold text-inverse mb-2">¡Cita Agendada!</h2>
               <p className="text-inverse/60 mb-6">
                 Te esperamos el {selectedDate && format(selectedDate, "d 'de' MMMM", { locale: es })} a las {selectedTime && formatTime(selectedTime)}
+              </p>
+              <p className="text-sm text-inverse/60 mb-6">
+                Te enviaremos la confirmación y un recordatorio por WhatsApp.
+                {cancelToken && (
+                  <>
+                    {' '}Si necesitas cancelar, usa{' '}
+                    <a href={`/cita/${cancelToken}`} className="text-primary underline">
+                      el enlace de tu cita
+                    </a>
+                    .
+                  </>
+                )}
               </p>
               <Button onClick={() => router.push('/')}>
                 Volver al inicio
