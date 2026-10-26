@@ -246,6 +246,7 @@ export default function MiDiaPage() {
         onDone={() => {
           setToComplete(null);
           setCommKey((k) => k + 1);
+          setSalesKey((k) => k + 1); // si llevó productos, aparecen en "Mis ventas de hoy"
           load();
           loyalty.reload();
         }}
