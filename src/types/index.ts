@@ -77,6 +77,9 @@ export interface Appointment {
   notes: string | null;
   client_name: string | null;
   client_phone: string | null;
+  cancel_token?: string | null;
+  source?: string | null;
+  price?: number | null;
   created_at: string;
   client?: Client;
   barber?: Barber;
@@ -130,7 +133,8 @@ export type AppointmentStatus =
   | 'confirmed' 
   | 'in_progress' 
   | 'completed' 
-  | 'cancelled';
+  | 'cancelled'
+  | 'no_show';
 
 export type ExpenseCategory = 
   | 'supplies'
@@ -184,6 +188,7 @@ export const APPOINTMENT_STATUSES: Record<AppointmentStatus, string> = {
   in_progress: 'En Proceso',
   completed: 'Completada',
   cancelled: 'Cancelada',
+  no_show: 'No asistió',
 };
 
 export const REMINDER_TYPES: Record<ReminderType, string> = {

@@ -25,6 +25,7 @@ import {
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useAppointments, useClients, useExpenses } from '@/hooks';
+import { useBarbers } from '@/hooks/useBarbers';
 import { Button, Input, Select, Modal, Card, Avatar, Badge } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { formatTime, cn, getErrorMessage } from '@/lib/utils';
@@ -37,11 +38,13 @@ const STATUS_COLORS: Record<AppointmentStatus, string> = {
   in_progress: 'info',
   completed: 'success',
   cancelled: 'error',
+  no_show: 'error',
 };
 
 const emptyForm = {
   client_id: '',
   service_id: '',
+  barber_id: '',
   date: '',
   start_time: '',
   notes: '',
@@ -50,6 +53,7 @@ const emptyForm = {
 export default function AppointmentsPage() {
   const { appointments, addAppointment, updateStatus, deleteAppointment, getAppointmentsByDate } = useAppointments();
   const { clients } = useClients();
+  const { barbers } = useBarbers();
   const { addExpense } = useExpenses();
   const { showToast } = useToast();
   
@@ -102,6 +106,7 @@ export default function AppointmentsPage() {
     const newErrors: Record<string, string> = {};
     if (!form.client_id) newErrors.client_id = 'Selecciona un cliente';
     if (!form.service_id) newErrors.service_id = 'Selecciona un servicio';
+    if (!form.barber_id) newErrors.barber_id = 'Selecciona un barbero';
     if (!form.date) newErrors.date = 'Selecciona una fecha';
     if (!form.start_time) newErrors.start_time = 'Selecciona una hora';
     setErrors(newErrors);
@@ -134,6 +139,7 @@ export default function AppointmentsPage() {
     const { error } = await addAppointment({
       client_id: form.client_id,
       service_id: form.service_id,
+      barber_id: form.barber_id,
       date: form.date,
       start_time: form.start_time,
       notes: form.notes || undefined,
@@ -465,6 +471,15 @@ export default function AppointmentsPage() {
             onChange={(e) => setForm({ ...form, service_id: e.target.value })}
             error={errors.service_id}
             options={services.map(s => ({ value: s.id, label: `${s.name} - $${s.price}` }))}
+          />
+
+          <Select
+            label="Barbero"
+            placeholder="Selecciona un barbero"
+            value={form.barber_id}
+            onChange={(e) => setForm({ ...form, barber_id: e.target.value })}
+            error={errors.barber_id}
+            options={barbers.filter(b => b.is_active).map(b => ({ value: b.id, label: b.name }))}
           />
 
           <Input

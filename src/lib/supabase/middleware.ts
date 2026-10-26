@@ -1,12 +1,24 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+/**
+ * Protección de rutas por rol:
+ *   /dashboard/*  → solo administradores activos (admin_users)
+ *   /mi-dia       → barberos con acceso (barbers.auth_id) o administradores
+ *   /login        → si ya hay sesión, redirige según el rol
+ * Todo lo demás (/, /book, /cita/*, /api/*) es público.
+ * Esta es la primera barrera; las políticas RLS de la base de datos son la que decide de verdad.
+ */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   });
+
+  const pathname = request.nextUrl.pathname;
+  const needsAuth = pathname.startsWith('/dashboard') || pathname.startsWith('/mi-dia');
+  if (!needsAuth && pathname !== '/login') return response;
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,84 +29,63 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          request.cookies.set({ name, value, ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
+          request.cookies.set({ name, value: '', ...options });
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getUser() valida el token contra Supabase (getSession() no es confiable en servidor).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
+  // Redirige conservando las cookies de sesión recién refrescadas
+  const redirectTo = (to: string) => {
+    const res = NextResponse.redirect(new URL(to, request.url));
+    response.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
+  };
 
-  // Verificar cookie de sesión de cliente
-  const clientSession = request.cookies.get('client_session')?.value;
+  async function roleOf(userId: string): Promise<'admin' | 'barber' | null> {
+    const { data: admin } = await supabase
+      .from('admin_users')
+      .select('id')
+      .eq('auth_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (admin) return 'admin';
 
-  // Rutas públicas siempre permitidas
-  if (pathname === '/' || pathname.startsWith('/book') || pathname.startsWith('/api')) {
+    const { data: barber } = await supabase
+      .from('barbers')
+      .select('id')
+      .eq('auth_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+    return barber ? 'barber' : null;
+  }
+
+  if (pathname === '/login') {
+    if (!user) return response;
+    const role = await roleOf(user.id);
+    if (role === 'admin') return redirectTo('/dashboard');
+    if (role === 'barber') return redirectTo('/mi-dia');
     return response;
   }
 
-  // Login y registro de admin - permitir si NO hay sesión activa
-  if (pathname === '/login' || pathname === '/register') {
-    if (user) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-    return response;
-  }
+  if (!user) return redirectTo('/login');
 
-  // Dashboard requiere usuario admin
-  if (pathname.startsWith('/dashboard')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-    return response;
-  }
+  const role = await roleOf(user.id);
+  if (!role) return redirectTo('/login?error=sin_acceso');
 
-  // Portal de cliente requiere sesión de cliente
-  if (pathname === '/client-portal') {
-    if (!clientSession) {
-      return NextResponse.redirect(new URL('/client-login', request.url));
-    }
-    return response;
-  }
+  if (pathname.startsWith('/dashboard') && role !== 'admin') return redirectTo('/mi-dia');
 
-  // Login y registro de cliente - permitir acceso
-  if (pathname === '/client-login' || pathname === '/register-client') {
-    return response;
-  }
-
-  // Default: permitir
   return response;
 }

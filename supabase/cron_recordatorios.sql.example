@@ -1,0 +1,27 @@
+-- Programa la llamada a /api/cron/reminders cada 5 minutos desde Supabase.
+-- No es una migración (por eso termina en .example): lleva tu dominio y tu secreto.
+--
+-- 1) Dashboard → Database → Extensions: habilita pg_cron y pg_net.
+-- 2) Guarda el secreto en Vault en vez de dejarlo en texto plano en el job:
+--      select vault.create_secret('EL_MISMO_VALOR_DE_CRON_SECRET', 'cron_secret');
+-- 3) Ajusta la URL y ejecuta en el SQL Editor.
+
+select cron.schedule(
+  'recordatorios-whatsapp',
+  '*/5 * * * *',
+  $$
+  select net.http_get(
+    url     := 'https://TU-DOMINIO.vercel.app/api/cron/reminders',
+    headers := jsonb_build_object(
+      'Authorization',
+      'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret')
+    ),
+    timeout_milliseconds := 20000
+  );
+  $$
+);
+
+-- Ver ejecuciones recientes:
+--   select * from cron.job_run_details order by start_time desc limit 10;
+-- Quitar el job:
+--   select cron.unschedule('recordatorios-whatsapp');

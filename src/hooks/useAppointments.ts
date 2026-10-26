@@ -48,6 +48,7 @@ export function useAppointments() {
   const addAppointment = async (appointment: {
     client_id: string;
     service_id: string;
+    barber_id: string;
     date: string;
     start_time: string;
     notes?: string;
@@ -72,6 +73,8 @@ export function useAppointments() {
         admin_id: adminId,
         client_id: appointment.client_id,
         service_id: appointment.service_id,
+        barber_id: appointment.barber_id,
+        source: 'admin',
         date: appointment.date,
         start_time: appointment.start_time,
         end_time: endTime,
@@ -81,6 +84,7 @@ export function useAppointments() {
       .select(`
         *,
         client:clients(*),
+        barber:barbers(id, name),
         service:services(*)
       `)
       .single();

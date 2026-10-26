@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Phone, Mail, Scissors, Clock } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Phone, Mail, Scissors, Clock, KeyRound } from 'lucide-react';
 import { useBarbers } from '@/hooks';
 import { Button, Input, Modal, Card, Avatar, Badge, Table } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -27,6 +27,33 @@ export default function BarbersPage() {
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accessBarber, setAccessBarber] = useState<Barber | null>(null);
+  const [accessForm, setAccessForm] = useState({ email: '', password: '' });
+  const [savingAccess, setSavingAccess] = useState(false);
+
+  const openAccess = (barber: Barber) => {
+    setAccessBarber(barber);
+    setAccessForm({ email: barber.email || '', password: '' });
+  };
+
+  const saveAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!accessBarber) return;
+    setSavingAccess(true);
+    const res = await fetch('/api/admin/barber-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barber_id: accessBarber.id, ...accessForm }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSavingAccess(false);
+    if (!res.ok) {
+      showToast(data.error || 'No se pudo guardar el acceso', 'error');
+      return;
+    }
+    showToast(data.updated ? 'Acceso actualizado' : 'Acceso creado: ya puede entrar en /login', 'success');
+    setAccessBarber(null);
+  };
 
   const filteredBarbers = barbers.filter((b) =>
     b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -157,7 +184,7 @@ export default function BarbersPage() {
     {
       key: 'actions',
       header: '',
-      className: 'w-32',
+      className: 'w-40',
       render: (barber: Barber) => (
         <div className="flex items-center gap-2 justify-end">
           <Link
@@ -167,6 +194,13 @@ export default function BarbersPage() {
           >
             <Clock className="w-4 h-4" />
           </Link>
+          <button
+            onClick={(e) => { e.stopPropagation(); openAccess(barber); }}
+            className="p-2 text-inverse/60 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+            title="Acceso a la app (Mi día)"
+          >
+            <KeyRound className="w-4 h-4" />
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); openEditModal(barber); }}
             className="p-2 text-inverse/60 hover:text-primary hover:bg-surface rounded-lg transition-colors"
@@ -280,6 +314,35 @@ export default function BarbersPage() {
             <Button type="submit" isLoading={isSubmitting} className="flex-1">
               {editingBarber ? 'Guardar' : 'Crear'}
             </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={!!accessBarber}
+        onClose={() => setAccessBarber(null)}
+        title={`Acceso de ${accessBarber?.name ?? ''}`}
+      >
+        <form onSubmit={saveAccess} className="space-y-4">
+          <p className="text-sm text-inverse/60">
+            Con este correo y contraseña el barbero entra a <strong>/login</strong> y ve solo sus citas del día.
+            Si ya tiene acceso, esto actualiza sus datos.
+          </p>
+          <Input
+            label="Correo"
+            type="email"
+            value={accessForm.email}
+            onChange={(e) => setAccessForm({ ...accessForm, email: e.target.value })}
+          />
+          <Input
+            label="Contraseña (mínimo 8 caracteres)"
+            type="password"
+            value={accessForm.password}
+            onChange={(e) => setAccessForm({ ...accessForm, password: e.target.value })}
+          />
+          <div className="flex gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={() => setAccessBarber(null)} className="flex-1">Cancelar</Button>
+            <Button type="submit" isLoading={savingAccess} className="flex-1">Guardar acceso</Button>
           </div>
         </form>
       </Modal>
