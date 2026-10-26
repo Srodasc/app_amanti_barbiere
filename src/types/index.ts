@@ -81,6 +81,10 @@ export interface Appointment {
   client_phone: string | null;
   cancel_token?: string | null;
   reward_rule_id?: string | null;
+  payment_method?: string | null;
+  paid_amount?: number | null;
+  paid_at?: string | null;
+  cancel_reason?: string | null;
   source?: string | null;
   price?: number | null;
   created_at: string;

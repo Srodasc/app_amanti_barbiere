@@ -27,7 +27,8 @@ export function useAppointments() {
       .select(`
         *,
         client:clients(*),
-        service:services(*)
+        service:services(*),
+        barber:barbers(id, name)
       `)
       // Un solo negocio: todos los administradores ven lo mismo (la RLS ya limita a administradores).
       // Antes se filtraba por admin_id y un segundo administrador no veía reservas ni gastos ajenos.
@@ -108,7 +109,8 @@ export function useAppointments() {
       .select(`
         *,
         client:clients(*),
-        service:services(*)
+        service:services(*),
+        barber:barbers(id, name)
       `)
       .single();
 
