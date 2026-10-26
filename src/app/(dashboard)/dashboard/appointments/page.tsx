@@ -24,7 +24,7 @@ import {
   isToday
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { useAppointments, useExpenses } from '@/hooks';
+import { useAppointments } from '@/hooks';
 import { isValidMobile } from '@/lib/phone';
 import { useBarbers } from '@/hooks/useBarbers';
 import { Button, Input, Select, Modal, Card, Avatar, Badge } from '@/components/ui';
@@ -34,6 +34,10 @@ import AppointmentReward from '@/components/loyalty/AppointmentReward';
 import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
 import { Appointment, AppointmentStatus, APPOINTMENT_STATUSES, Service } from '@/types';
 import { createClient } from '@/lib/supabase/client';
+import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
+import CancelAppointmentModal from '@/components/appointments/CancelAppointmentModal';
+import { PAYMENT_LABELS, SOURCE_LABELS, appointmentErrorMessage, money, whatsappLink } from '@/lib/appointments';
+import { formatPhone } from '@/lib/phone';
 
 const STATUS_COLORS: Record<AppointmentStatus, string> = {
   pending: 'warning',
@@ -61,16 +65,14 @@ export default function AppointmentsPage() {
     { id: string; name: string; visits_total: number; rewards_available: number } | null | 'none'
   >(null);
   const { barbers } = useBarbers();
-  const { addExpense } = useExpenses();
   const { showToast } = useToast();
   
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [appointmentToComplete, setAppointmentToComplete] = useState<Appointment | null>(null);
-  const [selectedExtraServices, setSelectedExtraServices] = useState<string[]>([]);
+  const [toComplete, setToComplete] = useState<Appointment | null>(null);
+  const [toCancel, setToCancel] = useState<Appointment | null>(null);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
   const [form, setForm] = useState(emptyForm);
 
@@ -99,14 +101,16 @@ export default function AppointmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointments]);
 
-  useState(() => {
-    const loadServices = async () => {
-      const supabase = createClient();
-      const { data } = await supabase.from('services').select('*').eq('is_active', true);
-      if (data) setServices(data);
-    };
-    loadServices();
-  });
+  useEffect(() => {
+    createClient()
+      .from('services')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        if (data) setServices(data);
+      });
+  }, []);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -200,81 +204,17 @@ export default function AppointmentsPage() {
   };
 
   const handleStatusChange = async (id: string, status: AppointmentStatus) => {
-    if (status === 'completed') {
-      const appointment = appointments.find(a => a.id === id);
-      if (appointment) {
-        setAppointmentToComplete(appointment);
-        setSelectedExtraServices([]);
-        setIsCompleteModalOpen(true);
-      }
-      return;
-    }
+    const appointment = appointments.find((a) => a.id === id);
+    // Completar = cobrar (complete_appointment); cancelar pide confirmación y motivo
+    if (status === 'completed') return setToComplete(appointment ?? null);
+    if (status === 'cancelled') return setToCancel(appointment ?? null);
 
     const { error } = await updateStatus(id, status);
     if (error) {
-      showToast(getErrorMessage(error), 'error');
+      showToast(appointmentErrorMessage(error), 'error');
     } else {
       showToast(`Estado actualizado a ${APPOINTMENT_STATUSES[status]}`, 'success');
     }
-  };
-
-  const handleCompleteWithExtras = async () => {
-    if (!appointmentToComplete) return;
-
-    setIsSubmitting(true);
-
-    // Primero actualizar el estado a completado
-    const { error: updateError } = await updateStatus(appointmentToComplete.id, 'completed');
-    
-    if (updateError) {
-      showToast(getErrorMessage(updateError), 'error');
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Crear gasto del servicio principal
-    if (appointmentToComplete.service) {
-      await addExpense({
-        concept: `Servicio: ${appointmentToComplete.service.name}`,
-        amount: appointmentToComplete.service.price,
-        category: 'other',
-        expense_date: new Date().toISOString().split('T')[0],
-        notes: `Cliente: ${appointmentToComplete.client?.name}`,
-      });
-    }
-
-    // Crear gastos de servicios adicionales
-    for (const extraServiceId of selectedExtraServices) {
-      const extraService = services.find(s => s.id === extraServiceId);
-      if (extraService) {
-        await addExpense({
-          concept: `Extra: ${extraService.name}`,
-          amount: extraService.price,
-          category: 'other',
-          expense_date: new Date().toISOString().split('T')[0],
-          notes: `Cliente: ${appointmentToComplete.client?.name}`,
-        });
-      }
-    }
-
-    showToast('Cita completada correctamente', 'success');
-    setIsCompleteModalOpen(false);
-    setIsSubmitting(false);
-  };
-
-  const toggleExtraService = (serviceId: string) => {
-    setSelectedExtraServices(prev => 
-      prev.includes(serviceId) 
-        ? prev.filter(id => id !== serviceId)
-        : [...prev, serviceId]
-    );
-  };
-
-  const calculateTotalExtra = () => {
-    return selectedExtraServices.reduce((total, id) => {
-      const service = services.find(s => s.id === id);
-      return total + (service?.price || 0);
-    }, 0);
   };
 
   const handleDelete = async () => {
@@ -424,15 +364,39 @@ export default function AppointmentsPage() {
                   
                   <div className="flex items-center gap-2">
                     <User className="w-4 h-4 text-inverse/50" />
-                    <span className="text-sm text-inverse">{appointment.client?.name}</span>
+                    <span className="text-sm font-semibold text-inverse">{appointment.client?.name ?? appointment.client_name ?? 'Cliente'}</span>
+                    {appointment.barber?.name && <span className="ml-auto text-xs font-semibold text-inverse/70">con {appointment.barber.name}</span>}
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <Scissors className="w-4 h-4 text-inverse/50" />
-                    <span className="text-sm text-inverse/50">
-                      {appointment.service?.name} - {formatCurrency(Number(appointment.price ?? appointment.service?.price ?? 0))}
+                    <span className="text-sm text-inverse/70">
+                      {appointment.service?.name} · {money(Number(appointment.price ?? appointment.service?.price ?? 0))}
                     </span>
+                    {appointment.source && SOURCE_LABELS[appointment.source] && (
+                      <span className="ml-auto text-[11px] font-bold px-1.5 py-0.5 rounded border border-primary-200 text-primary-700">
+                        {SOURCE_LABELS[appointment.source]}
+                      </span>
+                    )}
                   </div>
+
+                  {appointment.client?.phone && appointment.client.phone !== 'mostrador' && (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-inverse/70">{formatPhone(appointment.client.phone)}</span>
+                      {whatsappLink(appointment.client.phone) && (
+                        <a
+                          href={whatsappLink(appointment.client.phone)!}
+                          target="_blank"
+                          rel="noopener"
+                          className="text-xs font-bold px-2 py-1 rounded bg-success/15 text-success hover:bg-success/25"
+                        >
+                          WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {appointment.notes && <p className="text-sm text-inverse/80">“{appointment.notes}”</p>}
 
                   <AppointmentReward
                     appointment={appointment}
@@ -443,55 +407,65 @@ export default function AppointmentsPage() {
                     onChanged={() => refresh()}
                   />
 
-                  {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
-                    <div className="flex items-center gap-2 pt-2 border-t border-surface-container-low">
-                      {appointment.status === 'pending' && (
-                        <>
+                  {appointment.status === 'completed' && appointment.paid_amount != null && (
+                    <p className="text-sm font-semibold text-success">
+                      Cobrado {money(Number(appointment.paid_amount))}
+                      {appointment.payment_method && ` · ${PAYMENT_LABELS[appointment.payment_method] ?? appointment.payment_method}`}
+                    </p>
+                  )}
+                  {appointment.status === 'cancelled' && appointment.cancel_reason && (
+                    <p className="text-xs text-inverse/60">Motivo: {appointment.cancel_reason}</p>
+                  )}
+
+                  {['pending', 'confirmed', 'in_progress'].includes(appointment.status) && (
+                    <div className="space-y-2 pt-2 border-t border-surface-container-low">
+                      <div className="flex items-center gap-2">
+                        {appointment.status === 'pending' && (
                           <button
                             onClick={() => handleStatusChange(appointment.id, 'confirmed')}
-                            className="flex-1 p-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
+                            className="flex-1 min-h-[36px] text-xs font-semibold bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
                           >
                             Confirmar
                           </button>
+                        )}
+                        {appointment.status !== 'in_progress' && (
                           <button
                             onClick={() => handleStatusChange(appointment.id, 'in_progress')}
-                            className="flex-1 p-1.5 text-xs bg-info/15 text-info rounded hover:bg-info/25 transition-colors"
+                            className="flex-1 min-h-[36px] text-xs font-semibold bg-info/15 text-info rounded hover:bg-info/25 transition-colors"
                           >
                             Iniciar
                           </button>
-                        </>
-                      )}
-                      {appointment.status === 'confirmed' && (
-                        <button
-                          onClick={() => handleStatusChange(appointment.id, 'in_progress')}
-                          className="flex-1 p-1.5 text-xs bg-info/15 text-info rounded hover:bg-info/25 transition-colors"
-                        >
-                          Iniciar
-                        </button>
-                      )}
-                      {appointment.status === 'in_progress' && (
+                        )}
                         <button
                           onClick={() => handleStatusChange(appointment.id, 'completed')}
-                          className="flex-1 p-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
+                          className="flex-[2] min-h-[36px] text-xs font-bold bg-primary text-white rounded hover:bg-primary-600 transition-colors"
                         >
-                          Completar
+                          Completar y cobrar
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleStatusChange(appointment.id, 'cancelled')}
-                        className="p-1.5 text-xs bg-error/15 text-error rounded hover:bg-error/25 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleStatusChange(appointment.id, 'no_show')}
+                          className="flex-1 min-h-[34px] text-xs font-semibold border border-surface-container-low rounded hover:bg-surface transition-colors"
+                        >
+                          No llegó
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange(appointment.id, 'cancelled')}
+                          className="flex-1 min-h-[34px] text-xs font-semibold text-error border border-error/30 rounded hover:bg-error/10 transition-colors"
+                        >
+                          Cancelar…
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {(appointment.status === 'pending' || appointment.status === 'confirmed') && (
+                  {appointment.status !== 'completed' && (
                     <button
                       onClick={() => openDeleteModal(appointment)}
-                      className="w-full p-1.5 text-xs text-inverse/50 hover:text-error transition-colors"
+                      className="w-full p-1 text-[11px] text-inverse/50 hover:text-error transition-colors"
                     >
-                      Eliminar
+                      Eliminar (creada por error)
                     </button>
                   )}
                 </div>
@@ -543,7 +517,7 @@ export default function AppointmentsPage() {
             value={form.service_id}
             onChange={(e) => setForm({ ...form, service_id: e.target.value })}
             error={errors.service_id}
-            options={services.map(s => ({ value: s.id, label: `${s.name} - $${s.price}` }))}
+            options={services.map(s => ({ value: s.id, label: `${s.name} · ${money(Number(s.price))}` }))}
           />
 
           <Select
@@ -607,7 +581,7 @@ export default function AppointmentsPage() {
         size="sm"
       >
         <p className="text-inverse/60 mb-6">
-          ¿Estás seguro de eliminar esta cita? Esta acción no se puede deshacer.
+          Eliminar es solo para citas creadas por error: se borra sin dejar historial y no se avisa al cliente. Si el cliente no vendrá, usa «Cancelar cita». Esta acción no se puede deshacer.
         </p>
         <div className="flex gap-3">
           <Button
@@ -628,88 +602,43 @@ export default function AppointmentsPage() {
         </div>
       </Modal>
 
-      <Modal
-        isOpen={isCompleteModalOpen}
-        onClose={() => setIsCompleteModalOpen(false)}
-        title="Completar Cita"
-        size="md"
-      >
-        <div className="space-y-4">
-          <div className="bg-surface-container-low p-3 rounded-lg">
-            <p className="text-sm text-inverse/60">Servicio principal:</p>
-            <p className="font-semibold text-inverse">
-              {appointmentToComplete?.service?.name} - ${appointmentToComplete?.service?.price}
-            </p>
-          </div>
+      <CompleteAppointmentModal
+        target={
+          toComplete && {
+            id: toComplete.id,
+            clientName: toComplete.client?.name ?? toComplete.client_name,
+            serviceId: toComplete.service_id,
+            serviceName: toComplete.service?.name ?? null,
+            price: Number(toComplete.price ?? toComplete.service?.price ?? 0),
+            barberName: toComplete.barber?.name ?? null,
+            startTime: toComplete.start_time,
+            hasReward: !!toComplete.reward_rule_id,
+          }
+        }
+        onClose={() => setToComplete(null)}
+        onDone={(total) => {
+          showToast(`Cobro registrado: ${money(total)}`, 'success');
+          setToComplete(null);
+          refresh();
+        }}
+      />
 
-          {services.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-inverse mb-2">
-                ¿Servicios adicionales? (opcional)
-              </p>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {services.map(service => (
-                  <label
-                    key={service.id}
-                    className={cn(
-                      'flex items-center justify-between p-2 rounded cursor-pointer transition-colors',
-                      selectedExtraServices.includes(service.id)
-                        ? 'bg-primary/10 border border-primary'
-                        : 'bg-surface-container-low hover:bg-surface-container-low/80'
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedExtraServices.includes(service.id)}
-                        onChange={() => toggleExtraService(service.id)}
-                        className="w-4 h-4 rounded text-primary"
-                      />
-                      <span className="text-sm text-inverse">{service.name}</span>
-                    </div>
-                    <span className="text-sm font-medium text-primary">${service.price}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {selectedExtraServices.length > 0 && (
-            <div className="bg-success/10 p-3 rounded-lg">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-inverse">Total extras:</span>
-                <span className="font-bold text-success">${calculateTotalExtra()}</span>
-              </div>
-            </div>
-          )}
-
-          <div className="bg-primary/10 p-3 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-inverse">Total a cobrar:</span>
-              <span className="text-lg font-bold text-primary">
-                ${(appointmentToComplete?.service?.price || 0) + calculateTotalExtra()}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="ghost"
-              onClick={() => setIsCompleteModalOpen(false)}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleCompleteWithExtras}
-              isLoading={isSubmitting}
-              className="flex-1"
-            >
-              Completar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <CancelAppointmentModal
+        target={
+          toCancel && {
+            id: toCancel.id,
+            clientName: toCancel.client?.name ?? toCancel.client_name,
+            startTime: toCancel.start_time,
+            hasReward: !!toCancel.reward_rule_id,
+          }
+        }
+        onClose={() => setToCancel(null)}
+        onDone={() => {
+          showToast('Cita cancelada', 'success');
+          setToCancel(null);
+          refresh();
+        }}
+      />
     </div>
   );
 }

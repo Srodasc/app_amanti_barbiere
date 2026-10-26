@@ -50,8 +50,9 @@ export default function DashboardPage() {
   const thisMonth = monthKey(new Date());
   const productsByMonth = (m: string) =>
     productSales.filter((p) => monthKey(new Date(p.created_at)) === m).reduce((s, p) => s + p.total, 0);
-  const appointmentPrice = (a: { price?: number | null; service?: { price: number } | null }) =>
-    Number(a.price ?? a.service?.price ?? 0);
+  // Ingreso real: lo cobrado (precio + adicionales) si ya se cobró; si no, el precio de la cita
+  const appointmentPrice = (a: { paid_amount?: number | null; price?: number | null; service?: { price: number } | null }) =>
+    Number(a.paid_amount ?? a.price ?? a.service?.price ?? 0);
 
   const todayAppointments = getTodayAppointments();
   const completedToday = todayAppointments.filter(a => a.status === 'completed').length;

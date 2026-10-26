@@ -12,6 +12,8 @@ import MySalesToday from '@/components/products/MySalesToday';
 import AppointmentReward from '@/components/loyalty/AppointmentReward';
 import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
 import { formatCurrency } from '@/lib/utils';
+import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
+import { appointmentErrorMessage, money, PAYMENT_LABELS } from '@/lib/appointments';
 
 type Row = {
   id: string;
@@ -24,6 +26,8 @@ type Row = {
   service_id: string | null;
   price: number | null;
   reward_rule_id: string | null;
+  paid_amount: number | null;
+  payment_method: string | null;
   service: { name: string } | { name: string }[] | null;
   client: { name: string; phone: string } | { name: string; phone: string }[] | null;
 };
@@ -46,6 +50,7 @@ export default function MiDiaPage() {
   const loyalty = useLoyaltyForClients(rows.map((r) => r.client_id));
   const [tab, setTab] = useState<'citas' | 'vender' | 'disponibilidad'>('citas');
   const [salesKey, setSalesKey] = useState(0);
+  const [toComplete, setToComplete] = useState<Row | null>(null);
   const [saleMsg, setSaleMsg] = useState('');
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
 
@@ -64,7 +69,7 @@ export default function MiDiaPage() {
     setLoading(true);
     const { data, error } = await supabase()
       .from('appointments')
-      .select('id, date, start_time, end_time, status, notes, client_id, service_id, price, reward_rule_id, service:services(name), client:clients(name, phone)')
+      .select('id, date, start_time, end_time, status, notes, client_id, service_id, price, reward_rule_id, paid_amount, payment_method, service:services(name), client:clients(name, phone)')
       .eq('date', date)
       .neq('status', 'cancelled')
       .order('start_time');
@@ -79,7 +84,7 @@ export default function MiDiaPage() {
   const setStatus = async (id: string, status: string) => {
     setError('');
     const { error } = await supabase().from('appointments').update({ status }).eq('id', id);
-    if (error) setError(error.message);
+    if (error) setError(appointmentErrorMessage(error));
     else {
       load();
       loyalty.reload(); // completar suma visita; cancelar/no llegó devuelve el premio
@@ -182,10 +187,16 @@ export default function MiDiaPage() {
                       loyalty.reload();
                     }}
                   />
+                  {r.status === 'completed' && r.paid_amount != null && (
+                    <p className="mt-2 text-sm font-semibold text-success">
+                      Cobrado {money(Number(r.paid_amount))}
+                      {r.payment_method && ` · ${PAYMENT_LABELS[r.payment_method] ?? r.payment_method}`}
+                    </p>
+                  )}
                   {activa && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {r.status !== 'in_progress' && <Button size="sm" variant="secondary" onClick={() => setStatus(r.id, 'in_progress')}>Iniciar</Button>}
-                      <Button size="sm" onClick={() => setStatus(r.id, 'completed')}>Completar</Button>
+                      <Button size="sm" onClick={() => setToComplete(r)}>Completar y cobrar</Button>
                       <Button size="sm" variant="ghost" onClick={() => setStatus(r.id, 'no_show')}>No llegó</Button>
                     </div>
                   )}
@@ -197,6 +208,26 @@ export default function MiDiaPage() {
         </>
         )}
       </div>
+      <CompleteAppointmentModal
+        target={
+          toComplete && {
+            id: toComplete.id,
+            clientName: one(toComplete.client)?.name ?? null,
+            serviceId: toComplete.service_id,
+            serviceName: one(toComplete.service)?.name ?? null,
+            price: Number(toComplete.price ?? 0),
+            barberName: null,
+            startTime: toComplete.start_time,
+            hasReward: !!toComplete.reward_rule_id,
+          }
+        }
+        onClose={() => setToComplete(null)}
+        onDone={() => {
+          setToComplete(null);
+          load();
+          loyalty.reload();
+        }}
+      />
     </main>
   );
 }
