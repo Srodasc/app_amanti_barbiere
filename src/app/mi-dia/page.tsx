@@ -175,6 +175,8 @@ export default function MiDiaPage() {
                     appointment={r}
                     rules={loyalty.rules}
                     balances={loyalty.forClient(r.client_id)}
+                    clientName={c?.name}
+                    clientPhone={c?.phone}
                     onChanged={() => {
                       load();
                       loyalty.reload();

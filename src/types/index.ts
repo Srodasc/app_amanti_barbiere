@@ -47,6 +47,8 @@ export interface Client {
   name: string;
   email: string | null;
   phone: string | null;
+  notes?: string | null;
+  whatsapp_opt_in?: boolean;
   is_verified: boolean;
   created_at: string;
 }
