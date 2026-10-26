@@ -24,7 +24,8 @@ import {
   isToday
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { useAppointments, useClients, useExpenses } from '@/hooks';
+import { useAppointments, useExpenses } from '@/hooks';
+import { isValidMobile } from '@/lib/phone';
 import { useBarbers } from '@/hooks/useBarbers';
 import { Button, Input, Select, Modal, Card, Avatar, Badge } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -44,7 +45,8 @@ const STATUS_COLORS: Record<AppointmentStatus, string> = {
 };
 
 const emptyForm = {
-  client_id: '',
+  client_phone: '',
+  client_name: '',
   service_id: '',
   barber_id: '',
   date: '',
@@ -53,8 +55,11 @@ const emptyForm = {
 };
 
 export default function AppointmentsPage() {
-  const { appointments, addAppointment, updateStatus, deleteAppointment, getAppointmentsByDate, refresh } = useAppointments();
-  const { clients } = useClients();
+  const { appointments, updateStatus, deleteAppointment, getAppointmentsByDate, refresh } = useAppointments();
+  // Cliente identificado por celular (lookup_client_by_phone)
+  const [phoneMatch, setPhoneMatch] = useState<
+    { id: string; name: string; visits_total: number; rewards_available: number } | null | 'none'
+  >(null);
   const { barbers } = useBarbers();
   const { addExpense } = useExpenses();
   const { showToast } = useToast();
@@ -68,6 +73,19 @@ export default function AppointmentsPage() {
   const [selectedExtraServices, setSelectedExtraServices] = useState<string[]>([]);
   const [appointmentToDelete, setAppointmentToDelete] = useState<Appointment | null>(null);
   const [form, setForm] = useState(emptyForm);
+
+  useEffect(() => {
+    if (!isValidMobile(form.client_phone)) {
+      setPhoneMatch(null);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const { data } = await createClient().rpc('lookup_client_by_phone', { p_phone: form.client_phone });
+      const row = Array.isArray(data) ? data[0] : data;
+      setPhoneMatch(row ? row : 'none');
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.client_phone]);
   const [services, setServices] = useState<Service[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -112,7 +130,10 @@ export default function AppointmentsPage() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!form.client_id) newErrors.client_id = 'Selecciona un cliente';
+    const hasPhone = form.client_phone.trim() !== '';
+    if (hasPhone && !isValidMobile(form.client_phone)) newErrors.client_phone = 'Celular inválido';
+    if (hasPhone && phoneMatch === 'none' && form.client_name.trim().length < 2)
+      newErrors.client_name = 'Es un cliente nuevo: escribe su nombre';
     if (!form.service_id) newErrors.service_id = 'Selecciona un servicio';
     if (!form.barber_id) newErrors.barber_id = 'Selecciona un barbero';
     if (!form.date) newErrors.date = 'Selecciona una fecha';
@@ -144,22 +165,37 @@ export default function AppointmentsPage() {
     if (!validate()) return;
 
     setIsSubmitting(true);
-    const { error } = await addAppointment({
-      client_id: form.client_id,
-      service_id: form.service_id,
-      barber_id: form.barber_id,
-      date: form.date,
-      start_time: form.start_time,
-      notes: form.notes || undefined,
+    // La base de datos identifica (o crea) al cliente por su celular, valida el
+    // horario y, si hay celular, encola la confirmación por WhatsApp.
+    const { error } = await createClient().rpc('create_staff_appointment', {
+      p_barber: form.barber_id,
+      p_service: form.service_id,
+      p_date: form.date,
+      p_time: form.start_time,
+      p_name: form.client_name.trim() || null,
+      p_phone: form.client_phone.trim() || null,
+      p_source: 'staff',
+      p_notes: form.notes.trim() || null,
     });
 
     setIsSubmitting(false);
 
     if (error) {
-      showToast(getErrorMessage(error), 'error');
+      const m = error.message;
+      showToast(
+        m.includes('slot_unavailable')
+          ? 'Ese barbero ya tiene una cita a esa hora.'
+          : m.includes('invalid_phone')
+            ? 'El celular no es válido.'
+            : m.includes('invalid_name')
+              ? 'Es un cliente nuevo: escribe su nombre.'
+              : getErrorMessage(error),
+        'error'
+      );
     } else {
       showToast('Cita agendada correctamente', 'success');
       setIsModalOpen(false);
+      refresh();
     }
   };
 
@@ -402,6 +438,8 @@ export default function AppointmentsPage() {
                     appointment={appointment}
                     rules={loyalty.rules}
                     balances={loyalty.forClient(appointment.client_id)}
+                    clientName={appointment.client?.name}
+                    clientPhone={appointment.client?.phone}
                     onChanged={() => refresh()}
                   />
 
@@ -470,14 +508,34 @@ export default function AppointmentsPage() {
         title="Nueva Cita"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Select
-            label="Cliente"
-            placeholder="Selecciona un cliente"
-            value={form.client_id}
-            onChange={(e) => setForm({ ...form, client_id: e.target.value })}
-            error={errors.client_id}
-            options={clients.map(c => ({ value: c.id, label: c.name }))}
+          <Input
+            label="Celular del cliente"
+            type="tel"
+            inputMode="tel"
+            placeholder="300 123 4567"
+            value={form.client_phone}
+            onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
+            error={errors.client_phone}
           />
+          {phoneMatch && phoneMatch !== 'none' ? (
+            <p className="text-sm -mt-2 text-success">
+              {phoneMatch.name} · {phoneMatch.visits_total} visitas
+              {phoneMatch.rewards_available > 0 && ` · tiene ${phoneMatch.rewards_available} premio(s)`}
+            </p>
+          ) : (
+            <>
+              {phoneMatch === 'none' && <p className="text-sm -mt-2 text-inverse/60">Cliente nuevo: se creará con este celular.</p>}
+              {form.client_phone.trim() === '' && (
+                <p className="text-xs -mt-2 text-warning">Sin celular la cita queda como cliente de mostrador y no suma sellos.</p>
+              )}
+              <Input
+                label={phoneMatch === 'none' ? 'Nombre del cliente nuevo' : 'Nombre (opcional)'}
+                value={form.client_name}
+                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+                error={errors.client_name}
+              />
+            </>
+          )}
 
           <Select
             label="Servicio"
