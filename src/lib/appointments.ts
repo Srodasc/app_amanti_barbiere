@@ -38,6 +38,7 @@ export function appointmentErrorMessage(err: { message?: string } | null | undef
   if (m.includes('appointment_locked')) return 'La cita ya está completada o cancelada.';
   if (m.includes('invalid_payment')) return 'Elige el medio de pago.';
   if (m.includes('slot_unavailable') || m.includes('appointments_no_overlap')) return 'Ese barbero ya tiene una cita a esa hora.';
+  if (m.includes('commission_paid')) return 'La comisión de esta cita ya se le pagó al barbero. Anula esa liquidación en Comisiones para poder cambiarla.';
   if (m.includes('not_authorized')) return 'No tienes permiso para esta acción.';
   return m || 'Ocurrió un error inesperado.';
 }
