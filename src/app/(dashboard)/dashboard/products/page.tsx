@@ -44,7 +44,7 @@ const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? nul
 const n = (v: unknown) => Number(v) || 0;
 const when = (ts: string) => format(new Date(ts), "d MMM yyyy, h:mm a", { locale: es });
 
-const emptyProduct = { name: '', category: '', sku: '', sale_price: '', cost_price: '', min_stock: '0', initial_stock: '', initial_as_expense: false, is_active: true };
+const emptyProduct = { name: '', category: '', sku: '', sale_price: '', cost_price: '', min_stock: '0', initial_stock: '', is_active: true };
 
 export default function ProductsPage() {
   const supabase = () => createClient();
@@ -173,7 +173,6 @@ export default function ProductsPage() {
       cost_price: String(p.cost_price),
       min_stock: String(p.min_stock),
       initial_stock: '',
-      initial_as_expense: false,
       is_active: p.is_active,
     });
     setFormError('');
@@ -192,6 +191,8 @@ export default function ProductsPage() {
     if (!(cost >= 0)) return setFormError('El costo no es válido.');
     if (!Number.isInteger(min) || min < 0) return setFormError('El stock mínimo debe ser un número entero.');
     if (!Number.isInteger(initial) || initial < 0) return setFormError('El stock inicial debe ser un número entero.');
+    // El stock inicial es mercancía en la que ya se invirtió: siempre queda como gasto, así que necesita costo
+    if (editing === 'new' && initial > 0 && !(cost > 0)) return setFormError('Escribe el costo por unidad para registrar el gasto del stock inicial.');
 
     const payload = {
       name: form.name.trim(),
@@ -211,13 +212,13 @@ export default function ProductsPage() {
         return setFormError(productErrorMessage(error));
       }
       if (initial > 0) {
-        // Inventario inicial: por defecto no es gasto (ya lo tenías); se puede marcar si lo acabas de comprar
+        // Inventario inicial: siempre se registra como gasto (ya se invirtió en esa mercancía)
         const { error: e2 } = await supabase().rpc('register_stock_entry', {
           p_product: data.id,
           p_quantity: initial,
           p_unit_cost: cost || null,
           p_note: 'Inventario inicial',
-          p_as_expense: form.initial_as_expense && cost > 0,
+          p_as_expense: true,
         });
         if (e2) showToast(`Producto creado, pero no se cargó el stock inicial: ${productErrorMessage(e2)}`, 'error');
       }
@@ -230,7 +231,7 @@ export default function ProductsPage() {
     }
     setSaving(false);
     showToast(
-      editing === 'new' && initial > 0 && form.initial_as_expense && cost > 0
+      editing === 'new' && initial > 0
         ? `Producto creado y gasto de ${formatCurrency(initial * cost)} registrado`
         : editing === 'new'
           ? 'Producto creado'
@@ -537,24 +538,14 @@ export default function ProductsPage() {
             </label>
           )}
           {editing === 'new' && Number(form.initial_stock) > 0 && (
-            <div className="space-y-1">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.initial_as_expense}
-                  onChange={(e) => setForm({ ...form, initial_as_expense: e.target.checked })}
-                />
-                Registrar este stock inicial como gasto (márcalo si lo acabas de comprar)
-              </label>
-              {form.initial_as_expense && !(Number(form.cost_price) > 0) && (
-                <p className="text-xs text-warning">Escribe el costo para poder crear el gasto.</p>
-              )}
-              {form.initial_as_expense && Number(form.cost_price) > 0 && (
-                <p className="text-xs text-inverse/60">
-                  Gasto: <strong>{formatCurrency(Number(form.initial_stock) * Number(form.cost_price))}</strong>
-                </p>
-              )}
-            </div>
+            Number(form.cost_price) > 0 ? (
+              <p className="text-sm text-inverse/70">
+                Se registrará un gasto de{' '}
+                <strong>{formatCurrency(Number(form.initial_stock) * Number(form.cost_price))}</strong> por el stock inicial (Gastos → Insumos).
+              </p>
+            ) : (
+              <p className="text-xs text-warning">Escribe el costo por unidad: el stock inicial se registra como gasto.</p>
+            )
           )}
           {formError && <p className="text-sm text-error">{formError}</p>}
           <div className="flex gap-3 pt-2">
