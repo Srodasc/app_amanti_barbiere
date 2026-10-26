@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks';
 import { Button, Input, Modal, Card } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
 import { Service } from '@/types';
+import BusinessSettingsCard from '@/components/settings/BusinessSettingsCard';
 import { cn, getErrorMessage, getCurrentAdmin } from '@/lib/utils';
 
 const defaultService = {
@@ -170,6 +171,9 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-heading font-bold text-inverse">Configuración</h1>
         <p className="text-inverse/60">Gestiona los servicios de tu barbería</p>
       </div>
+
+      <BusinessSettingsCard />
+
 
       <Card>
         <div className="flex items-center justify-between mb-6">
