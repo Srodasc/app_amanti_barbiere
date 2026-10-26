@@ -666,6 +666,18 @@ create trigger trg_appointments_update
 -- 12. RLS — se reemplazan TODAS las políticas de estas tablas por un
 --     conjunto conocido (las del repo y las que se hayan agregado a mano).
 -- ---------------------------------------------------------------------
+-- RLS activada explícitamente en TODAS las tablas (idempotente), también en las que ya existían:
+-- así no depende de que el esquema original o algún script anterior la hubiera dejado activa.
+alter table admin_users        enable row level security;
+alter table barbers            enable row level security;
+alter table barber_schedules   enable row level security;
+alter table clients            enable row level security;
+alter table services           enable row level security;
+alter table appointments       enable row level security;
+alter table expenses           enable row level security;
+alter table reminders          enable row level security;
+alter table profiles           enable row level security;
+
 do $$
 declare
   r record;
