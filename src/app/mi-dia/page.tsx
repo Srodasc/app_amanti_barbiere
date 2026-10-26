@@ -15,6 +15,7 @@ import { formatCurrency } from '@/lib/utils';
 import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
 import RescheduleModal from '@/components/appointments/RescheduleModal';
 import MyCommissions from '@/components/commissions/MyCommissions';
+import InstallAppCard from '@/components/pwa/InstallAppCard';
 import { appointmentErrorMessage, money, PAYMENT_LABELS } from '@/lib/appointments';
 
 type Row = {
@@ -118,6 +119,7 @@ export default function MiDiaPage() {
           <h1 className="text-2xl font-heading font-bold text-inverse">Mi día</h1>
           <Button variant="ghost" size="sm" onClick={salir}>Salir</Button>
         </div>
+        <InstallAppCard />
         <div className="flex gap-2 mb-4">
           {(['citas', 'vender', 'disponibilidad'] as const).map((t) => (
             <button
