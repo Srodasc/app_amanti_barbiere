@@ -140,7 +140,7 @@ export default function CommissionsPage() {
   const activePreset = presets().find((p) => p.from === from && p.to === to)?.key;
 
   return (
-    <div className="space-y-4 animate-fade-in max-w-6xl">
+    <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-heading font-bold text-inverse">Comisiones</h1>
@@ -184,7 +184,53 @@ export default function CommissionsPage() {
         <Stat label="Por pagar" value={money(totals.pending)} strong={totals.pending > 0} />
       </div>
 
-      <div className="bg-white rounded-xl border border-surface-300 overflow-x-auto">
+      {/* Celular: una tarjeta por barbero */}
+      <ul className="md:hidden space-y-2">
+        {rows.map((r) => (
+          <li
+            key={r.barber_id}
+            onClick={() => setSelected(selected === r.barber_id ? null : r.barber_id)}
+            className={cn('bg-white rounded-xl border p-4 space-y-3', selected === r.barber_id ? 'border-primary' : 'border-surface-300')}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">{r.barber_name}</span>
+              <span className="text-sm text-inverse/70">
+                {Number(r.commission_pct)}% · {r.services} servicios
+              </span>
+            </div>
+            <dl className="grid grid-cols-3 gap-2 text-sm">
+              <div>
+                <dt className="text-xs text-inverse/60">Comisión</dt>
+                <dd className="font-semibold tabular-nums">{money(r.commission)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-inverse/60">Pagado</dt>
+                <dd className="tabular-nums text-success">{money(r.paid)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-inverse/60">Pendiente</dt>
+                <dd className={cn('font-bold tabular-nums', r.pending > 0 && 'text-primary-700')}>{money(r.pending)}</dd>
+              </div>
+            </dl>
+            {r.pending > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFromCash(false);
+                  setPayNotes('');
+                  setToPay(r);
+                }}
+                className="w-full h-10 rounded-lg bg-primary text-white text-sm font-bold"
+              >
+                Liquidar {money(r.pending)}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <div className="hidden md:block bg-white rounded-xl border border-surface-300 overflow-x-auto">
         <table className="w-full text-sm min-w-[760px]">
           <thead>
             <tr className="text-left text-inverse/70 border-b border-surface-300">

@@ -75,8 +75,43 @@ export default function Table<T>({
     );
   }
 
+  const cell = (col: Column<T>, item: T) => (col.render ? col.render(item) : ((item as Record<string, unknown>)[col.key] as ReactNode));
+  const [titleCol, ...restCols] = columns;
+
   return (
-    <div className="overflow-x-auto">
+    <>
+    {/* Celular: cada fila es una tarjeta (la primera columna es el título; las sin encabezado, las acciones) */}
+    <ul className="md:hidden divide-y divide-surface-container-low">
+      {data.map((item) => (
+        <li
+          key={keyExtractor(item)}
+          onClick={() => onRowClick?.(item)}
+          className={cn('px-4 py-3 space-y-2', onRowClick && 'cursor-pointer active:bg-surface-container-low')}
+        >
+          <div className="text-sm text-inverse">{cell(titleCol, item)}</div>
+          {restCols.some((c) => c.header) && (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              {restCols
+                .filter((c) => c.header)
+                .map((c) => (
+                  <div key={c.key} className="contents">
+                    <dt className="text-inverse/60">{c.header}</dt>
+                    <dd className="min-w-0 text-inverse break-words">{cell(c, item)}</dd>
+                  </div>
+                ))}
+            </dl>
+          )}
+          {restCols
+            .filter((c) => !c.header)
+            .map((c) => (
+              <div key={c.key} className="flex justify-end -mr-2">
+                {cell(c, item)}
+              </div>
+            ))}
+        </li>
+      ))}
+    </ul>
+    <div className="hidden md:block overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-surface-container-low">
@@ -116,5 +151,6 @@ export default function Table<T>({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

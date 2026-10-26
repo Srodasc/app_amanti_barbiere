@@ -12,7 +12,7 @@ import {
 import { useExpenses } from '@/hooks';
 import { Button, Input, Select, Modal, Card, Badge, Table } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
-import { formatCurrency, formatDate, cn, getErrorMessage } from '@/lib/utils';
+import { formatCurrency, formatDate, cn, getErrorMessage, compactMoney } from '@/lib/utils';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORIES } from '@/types';
 import { 
   AreaChart, 
@@ -309,13 +309,13 @@ export default function ExpensesPage() {
             </div>
           </div>
         </Card>
-        <Card className="lg:col-span-2">
+        <Card className="md:col-span-2">
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ebe4df" />
                 <XAxis dataKey="name" stroke="#313030" strokeOpacity={0.5} fontSize={12} />
-                <YAxis stroke="#313030" strokeOpacity={0.5} fontSize={12} tickFormatter={(v) => `$${v}`} />
+                <YAxis stroke="#313030" strokeOpacity={0.5} fontSize={12} tickFormatter={compactMoney} width={56} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#fcf9f8', border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(49, 48, 48, 0.1)' }}
                   labelStyle={{ color: '#313030' }}
@@ -336,13 +336,16 @@ export default function ExpensesPage() {
 
       <Card className="!p-0">
         <div className="p-4 border-b border-surface-container-low flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 min-w-0">
           <Input
             placeholder="Buscar gastos..."
+            aria-label="Buscar gastos"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             icon={<Search className="w-5 h-5" />}
-            className="flex-1"
           />
+          </div>
+          <div className="sm:w-64">
           <Select
             placeholder="Todas las categorías"
             value={categoryFilter}
@@ -351,8 +354,8 @@ export default function ExpensesPage() {
               { value: '', label: 'Todas las categorías' },
               ...Object.entries(EXPENSE_CATEGORIES).map(([value, label]) => ({ value, label })),
             ]}
-            className="sm:w-64"
           />
+          </div>
         </div>
         <Table
           columns={columns}
