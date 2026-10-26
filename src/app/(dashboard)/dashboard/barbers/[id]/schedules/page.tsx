@@ -48,7 +48,8 @@ export default function BarberSchedulesPage() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!form.day_of_week) {
+    // Ojo: domingo es 0, que en JavaScript cuenta como "falso"; por eso se compara con '' y no con !valor
+    if (form.day_of_week === '') {
       newErrors.day_of_week = 'Selecciona un día';
     }
     if (!form.start_time) {
@@ -65,7 +66,7 @@ export default function BarberSchedulesPage() {
   };
 
   const openCreateModal = (day?: DayOfWeek) => {
-    setForm({ ...emptyForm, day_of_week: day || ('' as DayOfWeek | '') });
+    setForm({ ...emptyForm, day_of_week: day ?? ('' as DayOfWeek | '') });
     setEditingSchedule(null);
     setErrors({});
     setIsModalOpen(true);
@@ -322,7 +323,12 @@ export default function BarberSchedulesPage() {
             label="Día de la semana"
             placeholder="Selecciona un día"
             value={form.day_of_week}
-            onChange={(e) => setForm({ ...form, day_of_week: parseInt(e.target.value) as DayOfWeek })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                day_of_week: e.target.value === '' ? '' : (parseInt(e.target.value, 10) as DayOfWeek),
+              })
+            }
             error={errors.day_of_week}
             options={dayOptions}
             disabled={!!editingSchedule}
