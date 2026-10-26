@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { BarberSchedule, DayOfWeek, DAYS_OF_WEEK } from '@/types';
 import type { Barber } from '@/types';
+import AvailabilityExtras from '@/components/schedule/AvailabilityExtras';
 
 const emptyForm = {
   day_of_week: '' as DayOfWeek | '',
@@ -308,6 +309,8 @@ export default function BarberSchedulesPage() {
         </div>
         )}
       </Card>
+
+      <AvailabilityExtras barberId={barberId} canEditBreaks />
 
       <Modal
         isOpen={isModalOpen}

@@ -1,9 +1,13 @@
 import { createClient as createPublicClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const publicSupabase = createPublicClient(supabaseUrl, supabaseAnonKey);
+export const dynamic = 'force-dynamic';
+
+// Se crea en cada petición (no al cargar el módulo) para que el build no dependa de las variables de entorno.
+const publicSupabase = () =>
+  createPublicClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false },
+  });
 
 export async function GET(
   request: Request,
@@ -12,7 +16,7 @@ export async function GET(
   try {
     const barberId = params.id;
 
-    const { data, error } = await publicSupabase
+    const { data, error } = await publicSupabase()
       .from('barber_schedules')
       .select('*')
       .eq('barber_id', barberId)
