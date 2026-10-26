@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { DATE_RE, TIME_RE, UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
 import { verifyCaptcha } from '@/lib/turnstile';
 import { CONSENT_VERSION } from '@/lib/privacy';
+import { noStoreFetch } from '@/lib/supabase/no-store';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false }, global: { fetch: noStoreFetch } }
   );
 
   const { data, error } = await supabase.rpc('book_appointment', {

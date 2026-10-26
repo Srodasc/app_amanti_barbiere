@@ -1,12 +1,13 @@
 import { createClient as createPublicClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { noStoreFetch } from '@/lib/supabase/no-store';
 
 export const dynamic = 'force-dynamic';
 
 // Se crea en cada petición (no al cargar el módulo) para que el build no dependa de las variables de entorno.
 const publicSupabase = () =>
   createPublicClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false },
+    auth: { persistSession: false }, global: { fetch: noStoreFetch },
   });
 
 export async function GET() {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { UUID_RE, clientIp, rateLimit } from '@/lib/rate-limit';
+import { noStoreFetch } from '@/lib/supabase/no-store';
 
 export const dynamic = 'force-dynamic';
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -9,7 +10,7 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function anon() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { persistSession: false },
+    auth: { persistSession: false }, global: { fetch: noStoreFetch },
   });
 }
 
