@@ -17,6 +17,7 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, addDays, isSame
 import { es } from 'date-fns/locale';
 import { Button, Input, Card, Avatar } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
+import Turnstile from '@/components/Turnstile';
 import { cn, formatTime } from '@/lib/utils';
 import { Service, Barber, BarberSchedule } from '@/types';
 
@@ -49,6 +50,11 @@ export default function BookingPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Captcha (solo si está configurada la clave pública)
+  const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const [captchaError, setCaptchaError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -170,6 +176,10 @@ export default function BookingPage() {
   const handleSubmit = async () => {
     if (!validateContact()) return;
     if (!selectedService || !selectedDate || !selectedTime) return;
+    if (captchaSiteKey && !captchaToken) {
+      showToast('Espera un momento: estamos verificando que eres una persona.', 'error');
+      return;
+    }
 
     setIsSubmitting(true);
     
@@ -186,6 +196,7 @@ export default function BookingPage() {
           client_name: contactForm.name,
           client_phone: contactForm.phone,
           notes: contactForm.notes || null,
+          captcha_token: captchaToken,
         }),
       });
 
@@ -193,6 +204,8 @@ export default function BookingPage() {
 
       if (!appointmentRes.ok) {
         showToast(appointmentData.error || 'Error al agendar', 'error');
+        // Cada token sirve una sola vez: se pide uno nuevo para el siguiente intento
+        if (captchaSiteKey) setCaptchaReset((n) => n + 1);
         if (appointmentRes.status === 409) {
           setSelectedTime(null);
           setCurrentStep('time');
@@ -208,6 +221,7 @@ export default function BookingPage() {
       setCurrentStep('confirm');
     } catch (error) {
       showToast('Error de conexión', 'error');
+      if (captchaSiteKey) setCaptchaReset((n) => n + 1);
     }
     
     setIsSubmitting(false);
@@ -561,8 +575,34 @@ export default function BookingPage() {
 
           {/* Submit */}
           {currentStep === 'contact' && (
-            <div className="pt-4">
-              <Button onClick={handleSubmit} isLoading={isSubmitting} className="w-full" size="lg">
+            <div className="pt-4 space-y-3">
+              {captchaSiteKey && (
+                <>
+                  <Turnstile
+                    siteKey={captchaSiteKey}
+                    resetKey={captchaReset}
+                    onToken={(t) => {
+                      setCaptchaToken(t);
+                      if (t) setCaptchaError('');
+                    }}
+                    onError={setCaptchaError}
+                  />
+                  {captchaError ? (
+                    <p className="text-sm text-error text-center">{captchaError}</p>
+                  ) : (
+                    !captchaToken && (
+                      <p className="text-xs text-inverse/50 text-center">Verificando que eres una persona…</p>
+                    )
+                  )}
+                </>
+              )}
+              <Button
+                onClick={handleSubmit}
+                isLoading={isSubmitting}
+                disabled={Boolean(captchaSiteKey) && !captchaToken}
+                className="w-full"
+                size="lg"
+              >
                 <Check className="w-5 h-5 mr-2" />
                 Confirmar Cita
               </Button>
