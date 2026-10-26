@@ -4,6 +4,14 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+/** Para ejes de gráficas: 45000 → "$45 mil", 1200000 → "$1,2 M" */
+export function compactMoney(value: number): string {
+  const n = Number(value) || 0;
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`;
+  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000).toLocaleString('es-CO')} mil`;
+  return `$${n}`;
+}
+
 export function formatCurrency(amount: number): string {
   // Pesos colombianos, sin decimales: $ 35.000
   return new Intl.NumberFormat('es-CO', {

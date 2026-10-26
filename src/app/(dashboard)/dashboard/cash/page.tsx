@@ -138,7 +138,7 @@ export default function CashPage() {
   );
 
   return (
-    <div className="space-y-4 animate-fade-in max-w-5xl">
+    <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-heading font-bold text-inverse">Caja</h1>

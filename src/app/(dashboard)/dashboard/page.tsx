@@ -12,7 +12,7 @@ import {
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Avatar } from '@/components/ui';
 import { useAppointments, useClients, useExpenses } from '@/hooks';
-import { formatCurrency, formatTime } from '@/lib/utils';
+import { formatCurrency, formatTime, compactMoney } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { APPOINTMENT_STATUSES } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -204,7 +204,7 @@ export default function DashboardPage() {
                 <BarChart data={revenueData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#ebe4df" />
                   <XAxis dataKey="name" stroke="#313030" strokeOpacity={0.5} fontSize={12} />
-                  <YAxis stroke="#313030" strokeOpacity={0.5} fontSize={12} tickFormatter={(v) => `$${v}`} />
+                  <YAxis stroke="#313030" strokeOpacity={0.5} fontSize={12} tickFormatter={compactMoney} width={60} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#fcf9f8', border: 'none', borderRadius: '8px', boxShadow: '0 4px 12px rgba(49, 48, 48, 0.1)' }}
                     labelStyle={{ color: '#313030' }}
