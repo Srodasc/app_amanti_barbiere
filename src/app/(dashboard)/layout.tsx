@@ -15,7 +15,8 @@ import {
   Menu,
   UserCog,
   Clock,
-  Package
+  Package,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { useReminders } from '@/hooks';
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/dashboard/products', icon: Package, label: 'Productos' },
   { href: '/dashboard/expenses', icon: DollarSign, label: 'Gastos' },
   { href: '/dashboard/reminders', icon: Bell, label: 'Recordatorios', badge: true },
+  { href: '/dashboard/users', icon: ShieldCheck, label: 'Usuarios' },
 ];
 
 const secondaryNavItems = [

@@ -92,6 +92,8 @@ export async function getCurrentAdmin(): Promise<string | null> {
     .select('id')
     .eq('auth_id', user.id)
     .eq('is_active', true)
-    .single();
+    .order('created_at')
+    .limit(1)
+    .maybeSingle(); // .single() fallaba si había filas duplicadas para la misma cuenta
   return admin?.id ?? null;
 }
