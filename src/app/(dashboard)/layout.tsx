@@ -17,7 +17,9 @@ import {
   Clock,
   Package,
   Gift,
-  ShieldCheck
+  ShieldCheck,
+  Wallet,
+  Percent
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { useReminders } from '@/hooks';
@@ -31,6 +33,8 @@ const navItems = [
   { href: '/dashboard/clients', icon: Users, label: 'Clientes' },
   { href: '/dashboard/products', icon: Package, label: 'Productos' },
   { href: '/dashboard/loyalty', icon: Gift, label: 'Fidelización' },
+  { href: '/dashboard/cash', icon: Wallet, label: 'Caja' },
+  { href: '/dashboard/commissions', icon: Percent, label: 'Comisiones' },
   { href: '/dashboard/expenses', icon: DollarSign, label: 'Gastos' },
   { href: '/dashboard/reminders', icon: Bell, label: 'Recordatorios', badge: true },
   { href: '/dashboard/users', icon: ShieldCheck, label: 'Usuarios' },

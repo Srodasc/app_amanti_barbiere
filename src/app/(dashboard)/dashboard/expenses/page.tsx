@@ -40,6 +40,7 @@ const emptyForm = {
   expense_date: new Date().toISOString().split('T')[0],
   receipt_url: '',
   notes: '',
+  paid_from_cash: false,
 };
 
 export default function ExpensesPage() {
@@ -123,6 +124,7 @@ export default function ExpensesPage() {
       expense_date: expense.expense_date,
       receipt_url: expense.receipt_url || '',
       notes: expense.notes || '',
+      paid_from_cash: !!expense.paid_from_cash,
     });
     setEditingExpense(expense);
     setErrors({});
@@ -146,6 +148,8 @@ export default function ExpensesPage() {
       expense_date: form.expense_date,
       receipt_url: form.receipt_url || null,
       notes: form.notes || null,
+      // Solo se envía si aplica: así el formulario sigue funcionando antes de la migración de caja
+      ...(form.paid_from_cash || editingExpense?.paid_from_cash ? { paid_from_cash: form.paid_from_cash } : {}),
     };
 
     let result;
@@ -212,7 +216,14 @@ export default function ExpensesPage() {
       key: 'concept',
       header: 'Concepto',
       render: (expense: Expense) => (
-        <span className="font-medium text-inverse">{expense.concept}</span>
+        <span className="font-medium text-inverse">
+          {expense.concept}
+          {expense.paid_from_cash && (
+            <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-200 text-inverse/70" title="Pagado con efectivo de la caja">
+              Caja
+            </span>
+          )}
+        </span>
       ),
     },
     {
@@ -393,6 +404,16 @@ export default function ExpensesPage() {
             onChange={(e) => setForm({ ...form, expense_date: e.target.value })}
             error={errors.expense_date}
           />
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.paid_from_cash}
+              onChange={(e) => setForm({ ...form, paid_from_cash: e.target.checked })}
+              className="w-4 h-4 accent-primary"
+            />
+            Pagado con efectivo de la caja (se descuenta en el cierre de ese día)
+          </label>
 
           <Input
             label="URL del comprobante (opcional)"
