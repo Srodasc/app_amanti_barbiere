@@ -13,6 +13,7 @@ import AppointmentReward from '@/components/loyalty/AppointmentReward';
 import { useLoyaltyForClients } from '@/components/loyalty/useLoyaltyForClients';
 import { formatCurrency } from '@/lib/utils';
 import CompleteAppointmentModal from '@/components/appointments/CompleteAppointmentModal';
+import RescheduleModal from '@/components/appointments/RescheduleModal';
 import { appointmentErrorMessage, money, PAYMENT_LABELS } from '@/lib/appointments';
 
 type Row = {
@@ -53,6 +54,18 @@ export default function MiDiaPage() {
   const [toComplete, setToComplete] = useState<Row | null>(null);
   const [saleMsg, setSaleMsg] = useState('');
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
+  const [toMove, setToMove] = useState<Row | null>(null);
+  const [mySchedules, setMySchedules] = useState<{ barber_id: string; day_of_week: number; is_available: boolean }[]>([]);
+
+  useEffect(() => {
+    if (!myBarberId) return;
+    supabase()
+      .from('barber_schedules')
+      .select('barber_id, day_of_week, is_available')
+      .eq('barber_id', myBarberId)
+      .then(({ data }) => setMySchedules(data ?? []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myBarberId]);
 
   useEffect(() => {
     // El barbero vinculado a esta sesión (un administrador puede no tener uno)
@@ -197,6 +210,9 @@ export default function MiDiaPage() {
                     <div className="flex flex-wrap gap-2 mt-3">
                       {r.status !== 'in_progress' && <Button size="sm" variant="secondary" onClick={() => setStatus(r.id, 'in_progress')}>Iniciar</Button>}
                       <Button size="sm" onClick={() => setToComplete(r)}>Completar y cobrar</Button>
+                      {myBarberId && r.status !== 'in_progress' && (
+                        <Button size="sm" variant="secondary" onClick={() => setToMove(r)}>Reprogramar</Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => setStatus(r.id, 'no_show')}>No llegó</Button>
                     </div>
                   )}
@@ -228,6 +244,29 @@ export default function MiDiaPage() {
           loyalty.reload();
         }}
       />
+      {myBarberId && (
+        <RescheduleModal
+          target={
+            toMove && {
+              id: toMove.id,
+              clientName: one(toMove.client)?.name ?? null,
+              date: toMove.date,
+              startTime: toMove.start_time,
+              barberId: myBarberId,
+              serviceId: toMove.service_id,
+              hasReward: !!toMove.reward_rule_id,
+            }
+          }
+          barbers={[{ id: myBarberId, name: 'Yo' }]}
+          schedules={mySchedules}
+          lockBarber
+          onClose={() => setToMove(null)}
+          onDone={() => {
+            setToMove(null);
+            load();
+          }}
+        />
+      )}
     </main>
   );
 }
