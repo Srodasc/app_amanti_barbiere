@@ -16,6 +16,9 @@ import CompleteAppointmentModal from '@/components/appointments/CompleteAppointm
 import RescheduleModal from '@/components/appointments/RescheduleModal';
 import MyCommissions from '@/components/commissions/MyCommissions';
 import InstallAppCard from '@/components/pwa/InstallAppCard';
+import AdminQuickView from '@/components/admin-app/AdminQuickView';
+import Link from 'next/link';
+import { LayoutDashboard } from 'lucide-react';
 import { appointmentErrorMessage, money, PAYMENT_LABELS } from '@/lib/appointments';
 
 type Row = {
@@ -56,6 +59,8 @@ export default function MiDiaPage() {
   const [toComplete, setToComplete] = useState<Row | null>(null);
   const [saleMsg, setSaleMsg] = useState('');
   const [myBarberId, setMyBarberId] = useState<string | null>(null);
+  // Quién entra: barbero, administrador o ambos (admin que también atiende)
+  const [role, setRole] = useState<{ ready: boolean; admin: boolean }>({ ready: false, admin: false });
   const [toMove, setToMove] = useState<Row | null>(null);
   const [commKey, setCommKey] = useState(0);
   const [mySchedules, setMySchedules] = useState<{ barber_id: string; day_of_week: number; is_available: boolean }[]>([]);
@@ -74,9 +79,13 @@ export default function MiDiaPage() {
     // El barbero vinculado a esta sesión (un administrador puede no tener uno)
     (async () => {
       const { data: { user } } = await supabase().auth.getUser();
-      if (!user) return;
-      const { data } = await supabase().from('barbers').select('id').eq('auth_id', user.id).maybeSingle();
+      if (!user) return setRole({ ready: true, admin: false });
+      const [{ data }, { data: admin }] = await Promise.all([
+        supabase().from('barbers').select('id').eq('auth_id', user.id).maybeSingle(),
+        supabase().from('admin_users').select('id').eq('auth_id', user.id).eq('is_active', true).limit(1).maybeSingle(),
+      ]);
       setMyBarberId(data?.id ?? null);
+      setRole({ ready: true, admin: !!admin });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -112,12 +121,29 @@ export default function MiDiaPage() {
     router.push('/login');
   };
 
+  if (!role.ready) {
+    return (
+      <main className="min-h-screen bg-surface flex items-center justify-center">
+        <p className="text-inverse/60">Cargando…</p>
+      </main>
+    );
+  }
+  // Administrador sin perfil de barbero: vista rápida de toda la barbería
+  if (role.admin && !myBarberId) return <AdminQuickView onSignOut={salir} />;
+
   return (
     <main className="min-h-screen bg-surface px-4 py-6">
       <div className="max-w-xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-2 mb-4">
           <h1 className="text-2xl font-heading font-bold text-inverse">Mi día</h1>
-          <Button variant="ghost" size="sm" onClick={salir}>Salir</Button>
+          <div className="flex items-center gap-2">
+            {role.admin && (
+              <Link href="/dashboard" className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-white text-sm font-bold">
+                <LayoutDashboard className="w-4 h-4" aria-hidden="true" /> Panel completo
+              </Link>
+            )}
+            <Button variant="ghost" size="sm" onClick={salir}>Salir</Button>
+          </div>
         </div>
         <InstallAppCard />
         <div className="flex gap-2 mb-4">

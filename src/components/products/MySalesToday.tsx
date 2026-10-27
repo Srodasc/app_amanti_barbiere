@@ -17,7 +17,7 @@ type Row = {
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
 
 /** Ventas de hoy del barbero que tiene la sesión (RLS solo le muestra las suyas). */
-export default function MySalesToday({ refreshKey }: { refreshKey: number }) {
+export default function MySalesToday({ refreshKey, title = 'Mis ventas de hoy' }: { refreshKey: number; title?: string }) {
   const [rows, setRows] = useState<Row[]>([]);
 
   useEffect(() => {
@@ -36,11 +36,11 @@ export default function MySalesToday({ refreshKey }: { refreshKey: number }) {
   return (
     <div className="bg-white rounded-lg shadow-sm p-4">
       <div className="flex justify-between items-baseline mb-2">
-        <h2 className="font-semibold">Mis ventas de hoy</h2>
+        <h2 className="font-semibold">{title}</h2>
         <span className="font-bold">{formatCurrency(total)}</span>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-inverse/60">Todavía no has vendido productos hoy.</p>
+        <p className="text-sm text-inverse/60">Todavía no hay ventas de productos hoy.</p>
       ) : (
         <ul className="divide-y divide-surface-container-low text-sm">
           {rows.map((r) => (
