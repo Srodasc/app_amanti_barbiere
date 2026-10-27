@@ -5,7 +5,7 @@
 --   * Citas y todo lo que depende de ellas: adicionales cobrados, cola de
 --     WhatsApp (notificaciones).
 --   * Clientes, con su avance y su historial de fidelización.
---   * Ingresos: ventas de productos (con sus líneas) y cierres de caja.
+--   * Cierres de caja.
 --   * Liquidaciones de comisiones (los GASTOS que generaron se conservan).
 --
 -- SE CONSERVA (no se toca):
@@ -13,6 +13,8 @@
 --   * Usuarios y accesos (administradores y barberos).
 --   * Servicios, reglas de fidelización, datos y ajustes del negocio.
 --   * Productos con su stock actual y TODO el historial de movimientos de inventario.
+--   * Ventas de productos: se conservan completas (total, barbero, medio de pago,
+--     productos). Solo pierden el enlace al cliente y a la cita borrados.
 --   * Gastos y recordatorios internos.
 --
 -- Cómo usarlo (Supabase → SQL Editor):
@@ -33,10 +35,9 @@ union all select 'Notificaciones WhatsApp', count(*) from notifications
 union all select 'Clientes', count(*) from clients
 union all select 'Saldos de fidelización', count(*) from loyalty_balances
 union all select 'Historial de fidelización', count(*) from loyalty_events
-union all select 'Ventas de productos', count(*) from product_sales
-union all select 'Líneas de venta', count(*) from product_sale_items
 union all select 'Cierres de caja', count(*) from cash_closings
-union all select 'Liquidaciones de comisiones', count(*) from commission_payouts;
+union all select 'Liquidaciones de comisiones', count(*) from commission_payouts
+union all select '(se conservan) Ventas de productos', count(*) from product_sales;
 
 
 -- ---------------------------------------------------------------------
@@ -50,8 +51,8 @@ create table respaldo_reset.notifications       as table notifications;
 create table respaldo_reset.clients             as table clients;
 create table respaldo_reset.loyalty_balances    as table loyalty_balances;
 create table respaldo_reset.loyalty_events      as table loyalty_events;
-create table respaldo_reset.product_sales       as table product_sales;
-create table respaldo_reset.product_sale_items  as table product_sale_items;
+-- De las ventas solo cambia el enlace al cliente y a la cita: se guarda para poder restaurarlo
+create table respaldo_reset.product_sales_links as select id, client_id, appointment_id from product_sales;
 create table respaldo_reset.cash_closings       as table cash_closings;
 create table respaldo_reset.commission_payouts  as table commission_payouts;
 -- El respaldo no es visible desde la app (no está en el esquema public).
@@ -65,9 +66,7 @@ revoke all on schema respaldo_reset from anon, authenticated;
 /*
 begin;
 
--- Ventas de productos: sus líneas se borran en cascada. El stock NO cambia
--- (queda como está hoy) y los movimientos de inventario se conservan.
-delete from product_sales;
+-- Las ventas de productos NO se borran (al borrar clientes y citas solo pierden ese enlace).
 
 -- Cierres de caja
 delete from cash_closings;
@@ -88,10 +87,10 @@ delete from clients;
 -- Verificación: todo en cero
 select 'Citas' as dato, count(*) as quedan from appointments
 union all select 'Clientes', count(*) from clients
-union all select 'Ventas de productos', count(*) from product_sales
 union all select 'Cierres de caja', count(*) from cash_closings
 union all select 'Liquidaciones', count(*) from commission_payouts
-union all select 'Fidelización', (select count(*) from loyalty_balances) + (select count(*) from loyalty_events);
+union all select 'Fidelización', (select count(*) from loyalty_balances) + (select count(*) from loyalty_events)
+union all select '(se conservan) Ventas de productos', count(*) from product_sales;
 
 commit;
 */
@@ -112,9 +111,8 @@ insert into appointment_extras select * from respaldo_reset.appointment_extras;
 insert into notifications      select * from respaldo_reset.notifications;
 insert into loyalty_balances   select * from respaldo_reset.loyalty_balances;
 insert into loyalty_events     select * from respaldo_reset.loyalty_events;
-insert into product_sales      select * from respaldo_reset.product_sales;
-insert into product_sale_items (id, sale_id, product_id, quantity, unit_price, unit_cost)
-  select id, sale_id, product_id, quantity, unit_price, unit_cost from respaldo_reset.product_sale_items;
+update product_sales ps set client_id = l.client_id, appointment_id = l.appointment_id
+  from respaldo_reset.product_sales_links l where l.id = ps.id;
 insert into cash_closings      select * from respaldo_reset.cash_closings;
 commit;
 */
