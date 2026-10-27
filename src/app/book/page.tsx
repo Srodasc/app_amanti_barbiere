@@ -190,6 +190,8 @@ export default function BookingPage() {
   }, [service, barber, date]);
 
   const openDays = days.filter((d) => d.status === 'open');
+  // Agenda semanal: la lista termina en domingo y tiene menos de 7 días → se abre cada lunes
+  const weeklyWindow = days.length > 0 && days.length < 7 && parseISO(days[days.length - 1].date).getDay() === 0;
   const earliest = openDays[0] ?? null;
 
   const groups = useMemo(() => {
@@ -534,7 +536,10 @@ export default function BookingPage() {
               <p className="py-8 text-center text-inverse-50">Buscando horarios disponibles...</p>
             ) : openDays.length === 0 ? (
               <div className="py-8 text-center space-y-2">
-                <p className="font-semibold">No hay horarios disponibles en los próximos días.</p>
+                <p className="font-semibold">
+                  {weeklyWindow ? 'Ya no hay horarios disponibles esta semana.' : 'No hay horarios disponibles en los próximos días.'}
+                </p>
+                {weeklyWindow && <p className="text-sm text-inverse-50">La agenda de la próxima semana se abre el lunes.</p>}
                 <p className="text-sm text-inverse-50">Prueba con otro barbero o escríbenos.</p>
                 <button type="button" onClick={() => setStep('barber')} className="btn-secondary px-4 py-2 mt-2">Elegir otro barbero</button>
               </div>
@@ -591,7 +596,10 @@ export default function BookingPage() {
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-inverse-50">Los días tachados están cerrados, son festivos o ya no tienen cupos.</p>
+                    <p className="text-xs text-inverse-50">
+                      Los días tachados están cerrados, son festivos o ya no tienen cupos.
+                      {weeklyWindow && ' La agenda de la próxima semana se abre el lunes.'}
+                    </p>
                   </div>
 
                   {/* Horarios */}
