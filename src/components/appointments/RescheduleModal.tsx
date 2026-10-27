@@ -63,10 +63,10 @@ export default function RescheduleModal({
     setError('');
     createClient()
       .from('services')
-      .select('id, name, price, duration_minutes')
+      .select('*') // sin columnas fijas: funciona antes y después de la migración de categorías
       .eq('is_active', true)
       .order('name')
-      .then(({ data }) => setServices((data ?? []) as Svc[]));
+      .then(({ data }) => setServices(((data ?? []) as (Svc & { kind?: string })[]).filter((s) => s.kind !== 'addon')));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.id]);
 

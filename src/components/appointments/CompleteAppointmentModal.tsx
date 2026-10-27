@@ -54,10 +54,17 @@ export default function CompleteAppointmentModal({
     setError('');
     createClient()
       .from('services')
-      .select('id, name, price')
+      .select('*')
       .eq('is_active', true)
       .order('name')
-      .then(({ data }) => setExtras(((data ?? []) as Extra[]).filter((s) => s.id !== target.serviceId)));
+      .then(({ data }) =>
+        // Adicionales primero; luego los demás servicios (por si el cliente pidió otro corte)
+        setExtras(
+          ((data ?? []) as (Extra & { kind?: string })[])
+            .filter((s) => s.id !== target.serviceId)
+            .sort((a, b) => Number(a.kind !== 'addon') - Number(b.kind !== 'addon') || a.name.localeCompare(b.name))
+        )
+      );
     createClient()
       .from('products')
       .select('id, name, sale_price, stock')

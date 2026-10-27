@@ -9,7 +9,7 @@ import { cn, getCurrentAdmin, getErrorMessage } from '@/lib/utils';
 import { money } from '@/lib/appointments';
 import type { Service } from '@/types';
 
-const empty = { name: '', duration: '30', price: '', description: '', is_active: true };
+const empty = { name: '', duration: '30', price: '', description: '', is_active: true, kind: 'main' as 'main' | 'addon' };
 const digits = (v: string) => v.replace(/[^\d]/g, '');
 
 /** Servicios de la barbería: crear, editar, activar/desactivar y eliminar (si nunca se usó). */
@@ -21,12 +21,16 @@ export default function ServicesCard() {
   const [form, setForm] = useState(empty);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [hasKind, setHasKind] = useState(false);
   const [toDelete, setToDelete] = useState<{ service: Service; uses: number } | null>(null);
 
   const load = useCallback(async () => {
     const { data, error } = await createClient().from('services').select('*').order('is_active', { ascending: false }).order('name');
     if (error) showToast(getErrorMessage(error), 'error');
     setServices((data ?? []) as Service[]);
+    // ¿Ya existe la columna de categoría? (antes de la migración se guarda sin ella)
+    if (data && data.length) setHasKind('kind' in data[0]);
+    else setHasKind(!(await createClient().from('services').select('kind').limit(1)).error);
   }, [showToast]);
 
   useEffect(() => {
@@ -45,6 +49,7 @@ export default function ServicesCard() {
     setForm({
       name: s.name,
       duration: String(s.duration_minutes),
+      kind: s.kind === 'addon' ? 'addon' : 'main',
       price: String(Math.round(Number(s.price))),
       description: s.description ?? '',
       is_active: s.is_active,
@@ -72,6 +77,7 @@ export default function ServicesCard() {
       price,
       description: form.description.trim() || null,
       is_active: form.is_active,
+      ...(hasKind ? { kind: form.kind } : {}),
     };
     const { error } = editing
       ? await db.from('services').update(values).eq('id', editing.id)
@@ -113,7 +119,7 @@ export default function ServicesCard() {
       <div className="flex items-center justify-between gap-3 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-inverse">Servicios</h2>
-          <p className="text-sm text-inverse/70">Lo que ofreces en la reserva, con su duración y precio.</p>
+          <p className="text-sm text-inverse/70">Servicios que se agendan y adicionales que se cobran en la cita.</p>
         </div>
         <Button onClick={openNew}>
           <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
@@ -130,55 +136,76 @@ export default function ServicesCard() {
           <Button onClick={openNew}>Crear el primero</Button>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {services.map((s) => (
-            <li
-              key={s.id}
-              className={cn('rounded-lg border p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3', s.is_active ? 'bg-white border-surface-300' : 'bg-surface border-surface-300')}
-            >
-              <button type="button" onClick={() => openEdit(s)} className="flex-1 min-w-0 text-left">
-                <span className={cn('flex items-center gap-2 font-semibold', !s.is_active && 'text-inverse/60')}>
-                  {s.name}
-                  {!s.is_active && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-300 text-inverse/70">Inactivo</span>}
-                </span>
-                <span className="flex items-center gap-3 mt-0.5 text-sm text-inverse/70">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" aria-hidden="true" /> {s.duration_minutes} min
-                  </span>
-                  <span className="font-semibold text-inverse">{money(s.price)}</span>
-                </span>
-                {s.description && <span className="block text-xs text-inverse/60 mt-0.5 truncate">{s.description}</span>}
-              </button>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => openEdit(s)}
-                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-primary-200 text-primary-700 text-sm font-semibold hover:bg-primary-50"
+        <div className="space-y-5">
+          {(hasKind
+            ? [
+                { key: 'main', title: 'Servicios que se agendan', hint: 'Aparecen en la reserva en línea.', list: services.filter((x) => x.kind !== 'addon') },
+                { key: 'addon', title: 'Adicionales', hint: 'No se agendan: se suman al cobrar la cita.', list: services.filter((x) => x.kind === 'addon') },
+              ]
+            : [{ key: 'all', title: '', hint: '', list: services }]
+          ).map((g) => (
+            <section key={g.key} className="space-y-2">
+              {g.title && (
+                <div>
+                  <h3 className="text-sm font-bold text-inverse">{g.title}</h3>
+                  <p className="text-xs text-inverse/60">{g.hint}</p>
+                </div>
+              )}
+              {g.list.length === 0 && <p className="text-sm text-inverse/60">Ninguno todavía.</p>}
+              <ul className="space-y-2">
+                {g.list.map((s) => (
+                <li
+                  key={s.id}
+                  className={cn('rounded-lg border p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3', s.is_active ? 'bg-white border-surface-300' : 'bg-surface border-surface-300')}
                 >
-                  <Pencil className="w-4 h-4" aria-hidden="true" /> Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => toggle(s)}
-                  className={cn(
-                    'px-3 h-9 rounded-lg text-sm font-semibold border',
-                    s.is_active ? 'border-surface-400 hover:bg-surface' : 'border-success/40 text-success hover:bg-success/10'
-                  )}
-                >
-                  {s.is_active ? 'Desactivar' : 'Activar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => askDelete(s)}
-                  aria-label={`Eliminar ${s.name}`}
-                  className="p-2 rounded-lg text-inverse/60 hover:text-error hover:bg-surface"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </li>
+                  <button type="button" onClick={() => openEdit(s)} className="flex-1 min-w-0 text-left">
+                    <span className={cn('flex items-center gap-2 font-semibold', !s.is_active && 'text-inverse/60')}>
+                      {s.name}
+                      {!s.is_active && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-surface-300 text-inverse/70">Inactivo</span>}
+                    </span>
+                    <span className="flex items-center gap-3 mt-0.5 text-sm text-inverse/70">
+                      {s.kind !== 'addon' && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" aria-hidden="true" /> {s.duration_minutes} min
+                        </span>
+                      )}
+                      <span className="font-semibold text-inverse">{money(s.price)}</span>
+                    </span>
+                    {s.description && <span className="block text-xs text-inverse/60 mt-0.5 truncate">{s.description}</span>}
+                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(s)}
+                      className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg border border-primary-200 text-primary-700 text-sm font-semibold hover:bg-primary-50"
+                    >
+                      <Pencil className="w-4 h-4" aria-hidden="true" /> Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggle(s)}
+                      className={cn(
+                        'px-3 h-9 rounded-lg text-sm font-semibold border',
+                        s.is_active ? 'border-surface-400 hover:bg-surface' : 'border-success/40 text-success hover:bg-success/10'
+                      )}
+                    >
+                      {s.is_active ? 'Desactivar' : 'Activar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => askDelete(s)}
+                      aria-label={`Eliminar ${s.name}`}
+                      className="p-2 rounded-lg text-inverse/60 hover:text-error hover:bg-surface"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
       <Modal isOpen={open} onClose={() => setOpen(false)} title={editing ? 'Editar servicio' : 'Nuevo servicio'}>
@@ -198,7 +225,36 @@ export default function ServicesCard() {
             {errors.name && <p className="text-sm text-error mt-1">{errors.name}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {hasKind && (
+            <fieldset>
+              <legend className="block text-sm font-semibold mb-1.5">Categoría</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['main', 'Servicio', 'Se agenda en la reserva'],
+                    ['addon', 'Adicional', 'Solo se suma al cobrar'],
+                  ] as const
+                ).map(([k, label, hint]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={form.kind === k}
+                    onClick={() => setForm({ ...form, kind: k })}
+                    className={cn(
+                      'rounded-lg border p-3 text-left',
+                      form.kind === k ? 'border-primary bg-primary-50' : 'border-surface-400 bg-white hover:border-primary'
+                    )}
+                  >
+                    <span className="block font-semibold text-sm">{label}</span>
+                    <span className="block text-xs text-inverse/70">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <div className={cn('grid gap-3', form.kind === 'addon' ? 'grid-cols-1' : 'grid-cols-2')}>
+            {form.kind !== 'addon' && (
             <div>
               <label htmlFor="svc-duration" className="block text-sm font-semibold mb-1.5">
                 Duración (min)
@@ -213,6 +269,7 @@ export default function ServicesCard() {
               />
               {errors.duration && <p className="text-sm text-error mt-1">{errors.duration}</p>}
             </div>
+            )}
             <div>
               <label htmlFor="svc-price" className="block text-sm font-semibold mb-1.5">
                 Precio
@@ -243,7 +300,7 @@ export default function ServicesCard() {
               id="svc-desc"
               className="input-field resize-none"
               rows={2}
-              placeholder="Se muestra al cliente en la reserva"
+              placeholder={form.kind === 'addon' ? 'Nota interna (opcional)' : 'Se muestra al cliente en la reserva'}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
@@ -251,7 +308,7 @@ export default function ServicesCard() {
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="w-4 h-4 accent-primary" />
-            Disponible en la reserva
+            {form.kind === 'addon' ? 'Activo (se puede cobrar)' : 'Disponible en la reserva'}
           </label>
 
           {editing && (
