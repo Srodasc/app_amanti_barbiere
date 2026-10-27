@@ -10,7 +10,16 @@ import { useToast } from '@/components/ui/Toast';
  * Datos del negocio (tabla business_settings). Alimentan la Política de datos
  * (/privacidad), el botón "Cómo llegar" y las reglas de la reserva en línea.
  */
-const FIELDS: { key: string; label: string; placeholder?: string; type?: string; group: 'negocio' | 'reserva' }[] = [
+type Field = {
+  key: string;
+  label: string;
+  placeholder?: string;
+  type?: string;
+  group: 'negocio' | 'reserva';
+  options?: { value: string; label: string }[];
+  showIf?: (v: Record<string, string>) => boolean;
+};
+const FIELDS: Field[] = [
   { key: 'business_name', label: 'Nombre comercial', placeholder: 'Amanti Barbiere', group: 'negocio' },
   { key: 'legal_name', label: 'Razón social o nombre del propietario', group: 'negocio' },
   { key: 'legal_id', label: 'NIT o cédula', group: 'negocio' },
@@ -19,7 +28,16 @@ const FIELDS: { key: string; label: string; placeholder?: string; type?: string;
   { key: 'business_phone', label: 'Teléfono / WhatsApp', type: 'tel', group: 'negocio' },
   { key: 'privacy_email', label: 'Correo para datos personales', type: 'email', group: 'negocio' },
   { key: 'privacy_policy_date', label: 'Política de datos vigente desde', type: 'date', group: 'negocio' },
-  { key: 'max_days_ahead', label: 'Días hacia adelante para reservar', type: 'number', group: 'reserva' },
+  {
+    key: 'booking_window',
+    label: 'Hasta cuándo pueden reservar los clientes',
+    group: 'reserva',
+    options: [
+      { value: 'week', label: 'Solo la semana en curso (hasta el domingo)' },
+      { value: 'days', label: 'Un número de días hacia adelante' },
+    ],
+  },
+  { key: 'max_days_ahead', label: 'Días hacia adelante para reservar', type: 'number', group: 'reserva', showIf: (v) => v.booking_window !== 'week' },
   { key: 'min_notice_hours', label: 'Horas mínimas de anticipación', type: 'number', group: 'reserva' },
   { key: 'cancel_before_hours', label: 'Horas antes para cancelar o cambiar en línea', type: 'number', group: 'reserva' },
   { key: 'max_client_reschedules', label: 'Veces que el cliente puede cambiar su cita', type: 'number', group: 'reserva' },
@@ -58,7 +76,33 @@ export default function BusinessSettingsCard() {
     showToast('Datos del negocio guardados', 'success');
   };
 
-  const field = (f: (typeof FIELDS)[number]) => (
+  const field = (f: Field) =>
+    f.showIf && !f.showIf(values) ? null : f.options ? (
+      values[f.key] === undefined ? null : (
+        <div key={f.key} className="sm:col-span-3">
+          <label htmlFor={`set-${f.key}`} className="block text-sm font-medium text-inverse/70 mb-2">
+            {f.label}
+          </label>
+          <select
+            id={`set-${f.key}`}
+            className="input-field"
+            value={values[f.key]}
+            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+          >
+            {f.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {values[f.key] === 'week' && (
+            <p className="text-xs text-inverse/60 mt-1">
+              Cada lunes se abre la semana nueva. El personal puede agendar más adelante desde el panel.
+            </p>
+          )}
+        </div>
+      )
+    ) : (
     <Input
       key={f.key}
       label={f.label}
