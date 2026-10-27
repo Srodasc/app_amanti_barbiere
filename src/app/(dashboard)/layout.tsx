@@ -21,6 +21,7 @@ import {
   Wallet,
   Percent,
   X,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { useReminders } from '@/hooks';
@@ -154,7 +155,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             ))}
 
-            <div className="mt-4 pt-3 border-t border-white/10">
+            <div className="mt-4 pt-3 border-t border-white/10 space-y-0.5">
+              <Link
+                href="/mi-dia"
+                className="flex items-center gap-3 px-3 min-h-[42px] rounded-lg text-[15px] text-white/85 hover:bg-white/10 hover:text-white"
+              >
+                <Smartphone className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                <span>Vista rápida (app)</span>
+              </Link>
               <a
                 href="/book"
                 target="_blank"
