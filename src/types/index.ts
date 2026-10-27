@@ -64,6 +64,8 @@ export interface Service {
   description: string | null;
   is_active: boolean;
   created_at: string;
+  /** main = se agenda; addon = adicional que solo se suma al cobrar */
+  kind?: 'main' | 'addon';
 }
 
 // Appointment (cita)

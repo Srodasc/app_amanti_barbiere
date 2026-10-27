@@ -22,7 +22,9 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data, {
+    // Los adicionales no se agendan: solo se suman al cobrar la cita
+    const bookable = (data ?? []).filter((s: { kind?: string }) => s.kind !== 'addon');
+    return NextResponse.json(bookable, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         'Pragma': 'no-cache',
