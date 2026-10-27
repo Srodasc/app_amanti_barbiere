@@ -1,17 +1,20 @@
 -- =====================================================================
--- Reserva por semana: los clientes solo pueden reservar en la semana en curso
--- (de hoy hasta el domingo). El lunes se abre la semana nueva.
+-- Ventana de reserva para clientes: 7 días que se van abriendo día a día
+-- (hoy y los 6 siguientes; cada medianoche se abre un día nuevo al final).
 -- Se configura en Configuración → Reglas de la reserva:
---   booking_window = 'week'  → semana en curso (lunes a domingo)
---   booking_window = 'days'  → próximos N días (max_days_ahead), como antes
+--   booking_window = 'days'  → hoy + max_days_ahead días (ventana móvil) — por defecto
+--   booking_window = 'week'  → solo la semana en curso (hasta el domingo)
 -- Solo afecta a la reserva pública y a los cambios que hace el cliente desde su
 -- enlace. El personal puede agendar y mover citas más adelante desde el panel.
 -- Requiere: 20261102000001_reserva_fase3.sql. Idempotente.
 -- =====================================================================
 
 insert into business_settings (key, value, description) values
-  ('booking_window', 'week', 'Ventana de reserva: week = semana en curso (lun–dom); days = próximos N días')
+  ('booking_window', 'days', 'Ventana de reserva: days = hoy + N días (móvil); week = semana en curso (lun–dom)')
 on conflict (key) do nothing;
+
+-- Decisión del negocio: 7 días visibles para el cliente (hoy + 6)
+update business_settings set value = '6' where key = 'max_days_ahead';
 
 drop policy if exists settings_public on business_settings;
 create policy settings_public on business_settings for select

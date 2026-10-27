@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Building2 } from 'lucide-react';
+import { addDays, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { createClient } from '@/lib/supabase/client';
 import { Button, Card, Input } from '@/components/ui';
 import { useToast } from '@/components/ui/Toast';
@@ -33,11 +35,12 @@ const FIELDS: Field[] = [
     label: 'Hasta cuándo pueden reservar los clientes',
     group: 'reserva',
     options: [
+      { value: 'days', label: 'Un número de días que se va abriendo día a día' },
       { value: 'week', label: 'Solo la semana en curso (hasta el domingo)' },
-      { value: 'days', label: 'Un número de días hacia adelante' },
     ],
   },
-  { key: 'max_days_ahead', label: 'Días hacia adelante para reservar', type: 'number', group: 'reserva', showIf: (v) => v.booking_window !== 'week' },
+  // Se muestra como "días que ve el cliente, incluido hoy" (= max_days_ahead + 1) para evitar confusiones
+  { key: 'max_days_ahead', label: 'Días que el cliente puede ver (incluido hoy)', type: 'number', group: 'reserva', showIf: (v) => v.booking_window !== 'week' },
   { key: 'min_notice_hours', label: 'Horas mínimas de anticipación', type: 'number', group: 'reserva' },
   { key: 'cancel_before_hours', label: 'Horas antes para cancelar o cambiar en línea', type: 'number', group: 'reserva' },
   { key: 'max_client_reschedules', label: 'Veces que el cliente puede cambiar su cita', type: 'number', group: 'reserva' },
@@ -54,7 +57,12 @@ export default function BusinessSettingsCard() {
       .from('business_settings')
       .select('key, value')
       .in('key', FIELDS.map((f) => f.key))
-      .then(({ data }) => setValues(Object.fromEntries((data ?? []).map((r) => [r.key, r.value ?? '']))));
+      .then(({ data }) => {
+        const v: Record<string, string> = Object.fromEntries((data ?? []).map((r) => [r.key, r.value ?? '']));
+        // En pantalla: días que ve el cliente incluido hoy (guardado: días además de hoy)
+        if (v.max_days_ahead !== undefined && v.max_days_ahead !== '') v.max_days_ahead = String(Number(v.max_days_ahead) + 1);
+        setValues(v);
+      });
   }, []);
 
   const save = async (e: React.FormEvent) => {
@@ -62,14 +70,21 @@ export default function BusinessSettingsCard() {
     setError('');
     const email = values.privacy_email?.trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('El correo no es válido.');
-    for (const k of ['max_days_ahead', 'min_notice_hours', 'cancel_before_hours', 'max_client_reschedules']) {
+    const shown = Number(values.max_days_ahead);
+    if (values.max_days_ahead !== undefined && (!Number.isInteger(shown) || shown < 1 || shown > 366)) {
+      return setError('Los días que ve el cliente deben estar entre 1 y 366.');
+    }
+    for (const k of ['min_notice_hours', 'cancel_before_hours', 'max_client_reschedules']) {
       const n = Number(values[k]);
       if (values[k] !== undefined && values[k] !== '' && (!Number.isInteger(n) || n < 0 || n > 365)) {
         return setError('Las reglas de reserva deben ser números enteros entre 0 y 365.');
       }
     }
     setSaving(true);
-    const rows = FIELDS.filter((f) => values[f.key] !== undefined).map((f) => ({ key: f.key, value: (values[f.key] ?? '').trim() }));
+    const rows = FIELDS.filter((f) => values[f.key] !== undefined).map((f) => ({
+      key: f.key,
+      value: f.key === 'max_days_ahead' ? String(Number(values[f.key]) - 1) : (values[f.key] ?? '').trim(),
+    }));
     const { error } = await createClient().from('business_settings').upsert(rows, { onConflict: 'key' });
     setSaving(false);
     if (error) return setError(error.message);
@@ -103,14 +118,20 @@ export default function BusinessSettingsCard() {
         </div>
       )
     ) : (
-    <Input
-      key={f.key}
-      label={f.label}
-      type={f.type ?? 'text'}
-      placeholder={f.placeholder}
-      value={values[f.key] ?? ''}
-      onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-    />
+    <div key={f.key}>
+      <Input
+        label={f.label}
+        type={f.type ?? 'text'}
+        placeholder={f.placeholder}
+        value={values[f.key] ?? ''}
+        onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+      />
+      {f.key === 'max_days_ahead' && Number(values.max_days_ahead) >= 1 && (
+        <p className="text-xs text-inverse/60 mt-1">
+          Hoy pueden reservar hasta el {format(addDays(new Date(), Number(values.max_days_ahead) - 1), "EEEE d 'de' MMMM", { locale: es })}. Cada día se abre uno nuevo.
+        </p>
+      )}
+    </div>
   );
 
   return (
